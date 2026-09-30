@@ -4,13 +4,14 @@ const { parseArgs } = require('util');
 const readline = require('readline');
 const { ARQUIVO_CONFIG, AMBIENTES, carregarConfig, salvarConfig, expandirHome } = require('../src/config');
 const { ultimoDiaUtil, formatarBR, parseBR, iso } = require('../src/datas');
-const { parseValor, formatarValor, soDigitos, formatarCnpj } = require('../src/valores');
+const { parseValor, formatarValor, soDigitos, formatarCnpj, cnpjValido } = require('../src/valores');
 
 const AJUDA = `
 nfse-mei - emite a NFS-e do MEI no Emissor Nacional (nfse.gov.br)
 
 Uso:
-  nfse-mei init                     cria/edita o config (seus dados, serviço e clientes)
+  nfse-mei init                     primeiro cadastro, passo a passo (seus dados, serviço e clientes)
+  nfse-mei config                   menu para mudar seus dados, o serviço, os clientes e a senha
   nfse-mei senha [CNPJ]             guarda a senha do emissor (login automático)
   nfse-mei senha apagar             apaga a senha guardada
   nfse-mei emitir [opções]          pergunta cliente/valor/competência, preenche e emite
@@ -53,60 +54,161 @@ async function perguntar(pergunta, padrao) {
   return r || (padrao ?? '');
 }
 
-async function init() {
-  let cfg = {};
-  try { cfg = carregarConfig(); } catch { /* config novo */ }
-  const s = cfg.servico || {};
-  const obrigatorio = async (pergunta, atual) => {
+// ---- Cadastro: cada parte do config tem sua função, usada tanto no init quanto no menu `config`.
+
+// Pergunta até vir uma resposta válida (sem derrubar o cadastro por um erro de digitação).
+async function perguntarValido(pergunta, atual, validar = r => (r ? null : 'obrigatório')) {
+  for (;;) {
     const r = await perguntar(pergunta, atual);
-    if (!r) throw new Error(`"${pergunta}" é obrigatório`);
-    return r;
-  };
-  log('Vamos configurar os dados que se repetem todo mês (Enter mantém o valor entre colchetes).\n');
+    const problema = validar(r);
+    if (!problema) return r;
+    if (leitor?.closed) throw new Error(`"${pergunta}": ${problema}`);
+    log(`  ✗ ${problema}, tente de novo.`);
+  }
+}
+const validarCnpj = r => (cnpjValido(r) ? null : 'CNPJ inválido (confira os 14 números)');
+const simOuNao = async (pergunta, padrao) => (await perguntar(`${pergunta} (${padrao === 's' ? 'S/n' : 's/N'})`, padrao)).toLowerCase().startsWith('s');
 
-  log('1) VOCÊ (prestador): o CNPJ do seu MEI, o mesmo que você usa para entrar no Emissor Nacional.');
-  cfg.prestadorCnpj = soDigitos(await obrigatorio('Seu CNPJ', cfg.prestadorCnpj));
-  if (cfg.prestadorCnpj.length !== 14) throw new Error('CNPJ precisa ter 14 dígitos');
+async function editarPrestador(cfg) {
+  log('VOCÊ (prestador): o CNPJ do seu MEI, o mesmo que você usa para entrar no Emissor Nacional.');
+  cfg.prestadorCnpj = soDigitos(await perguntarValido('Seu CNPJ', cfg.prestadorCnpj, validarCnpj));
   cfg.ambiente = cfg.ambiente || 'producao';
-  cfg.pastaNotas = await perguntar('Pasta onde registrar as notas', cfg.pastaNotas || '~/Documents/NFSe');
+  cfg.pastaNotas = await perguntar('Pasta onde guardar as notas (PDF/XML)', cfg.pastaNotas || '~/Documents/NFSe');
+}
 
-  log('\n2) O SERVIÇO: copie da sua última nota emitida no portal.');
+async function editarServico(cfg) {
+  const s = cfg.servico || {};
+  log('O SERVIÇO: copie da sua última nota emitida no portal (Notas emitidas → ⋮ → Visualizar).');
   cfg.servico = {
-    municipio: await obrigatorio('Município onde o serviço é prestado, como aparece no portal (ex: São Paulo/SP)', s.municipio),
-    codigoTributacaoNacional: await obrigatorio('Código de Tributação Nacional (ex: 01.01.01)', s.codigoTributacaoNacional),
-    nbs: soDigitos(await obrigatorio('Item da NBS, 9 dígitos (ex: 115022000)', s.nbs)),
-    descricao: await obrigatorio('Descrição do serviço', s.descricao),
+    municipio: await perguntarValido('Município onde o serviço é prestado, como aparece no portal (ex: São Paulo/SP)', s.municipio),
+    codigoTributacaoNacional: await perguntarValido('Código de Tributação Nacional (ex: 01.01.01)', s.codigoTributacaoNacional,
+      r => (/^\d{2}\.\d{2}\.\d{2}$/.test(r.trim()) ? null : 'use o formato 00.00.00')),
+    nbs: soDigitos(await perguntarValido('Item da NBS, 9 dígitos (ex: 115022000)', s.nbs,
+      r => (soDigitos(r).length === 9 ? null : 'a NBS tem 9 números'))),
+    descricao: await perguntarValido('Descrição do serviço', s.descricao),
   };
   cfg.tributosAproximados = cfg.tributosAproximados ?? 3;
+}
 
-  log('\n3) SEUS CLIENTES (tomadores): para quem você emite nota. Dá pra ter vários.');
-  cfg.tomadores = cfg.tomadores || {};
-  do {
-    const apelido = (await obrigatorio('Apelido do cliente, curto e sem espaço (ex: acme)', cfg.tomadorPadrao)).toLowerCase();
-    const t = cfg.tomadores[apelido] || {};
-    const cnpj = soDigitos(await obrigatorio('  CNPJ do cliente', t.cnpj));
-    if (cnpj.length !== 14) throw new Error('CNPJ precisa ter 14 dígitos');
-    cfg.tomadores[apelido] = {
-      cnpj,
-      nome: await perguntar('  Razão social do cliente (o script confere com o portal)', t.nome),
-    };
-    cfg.tomadorPadrao = cfg.tomadorPadrao || apelido;
-  } while ((await perguntar('Adicionar outro cliente? (s/N)', 'n')).toLowerCase() === 's');
-  salvarConfig(cfg);
-  log(`\nConfig salvo em ${ARQUIVO_CONFIG}`);
-
-  const cred = require('../src/credencial');
-  if (cred.SUPORTADO && (await perguntar('\n4) Guardar agora a senha do Emissor Nacional? (S/n)', 's')).toLowerCase() !== 'n') {
-    cred.salvarCredencial(cfg.prestadorCnpj);
-    log(`Senha guardada ${cred.ONDE}.`);
+// Adiciona (apelido vazio) ou edita um cliente. Trocar o apelido renomeia o cliente.
+async function editarCliente(cfg, apelidoAtual) {
+  const t = cfg.tomadores[apelidoAtual] || {};
+  const apelido = (await perguntarValido('Apelido do cliente, curto e sem espaço (ex: acme)', apelidoAtual, r => {
+    const a = r.toLowerCase();
+    if (!/^[a-z0-9_-]+$/.test(a)) return 'use só letras, números, - ou _';
+    if (a !== apelidoAtual && cfg.tomadores[a]) return `já existe um cliente "${a}"`;
+    return null;
+  })).toLowerCase();
+  const cnpj = soDigitos(await perguntarValido('  CNPJ do cliente', t.cnpj, validarCnpj));
+  const nome = await perguntar('  Razão social do cliente (o script confere com o portal)', t.nome);
+  if (apelidoAtual && apelidoAtual !== apelido) {
+    delete cfg.tomadores[apelidoAtual];
+    if (cfg.tomadorPadrao === apelidoAtual) cfg.tomadorPadrao = apelido;
   }
-  log('\nPróximo passo: nfse-mei emitir --teste');
+  cfg.tomadores[apelido] = { cnpj, nome };
+  cfg.tomadorPadrao = cfg.tomadorPadrao || apelido;
+  return apelido;
+}
+
+async function guardarSenha(cfg) {
+  const cred = require('../src/credencial');
+  log(process.platform === 'darwin'
+    ? 'Digite a senha do Emissor Nacional (não aparece na tela) e repita para confirmar:'
+    : 'Abrindo a janela do Windows para digitar a senha...');
+  cred.salvarCredencial(cfg.prestadorCnpj);
+  log(`Senha guardada ${cred.ONDE}.`);
+}
+
+// Primeira vez: passo a passo. Se já existe config, abre o menu para mudar só o que precisa.
+async function init({ seguirParaNota = false } = {}) {
+  let cfg;
+  try { cfg = carregarConfig(); } catch { /* config novo */ }
+  if (cfg) return menuConfig(cfg);
+  cfg = { tomadores: {} };
+  if (!seguirParaNota) log('Vamos cadastrar os dados que se repetem todo mês.');
+  log('É uma vez só; depois dá pra mudar com `nfse-mei config`.\n');
+  log('1) ' + '-'.repeat(40));
+  await editarPrestador(cfg);
+  log('\n2) ' + '-'.repeat(40));
+  await editarServico(cfg);
+  log('\n3) ' + '-'.repeat(40));
+  log('SEUS CLIENTES (tomadores): para quem você emite nota. Dá pra ter vários.');
+  do await editarCliente(cfg, ''); while (await simOuNao('Adicionar outro cliente?', 'n'));
+  salvarConfig(cfg);
+  log(`\nTudo salvo em ${ARQUIVO_CONFIG}`);
+  if (require('../src/credencial').SUPORTADO) {
+    log('\n4) ' + '-'.repeat(40));
+    if (await simOuNao('Guardar agora a senha do Emissor Nacional (login automático)?', 's')) await guardarSenha(cfg);
+  }
+  if (seguirParaNota) log('\nCadastro pronto. Das próximas vezes o nfse-mei já usa esses dados (mude com `nfse-mei config`).\nAgora, a nota:\n');
+  else log('\nPróximo passo: nfse-mei emitir --teste');
+}
+
+async function menuClientes(cfg) {
+  for (;;) {
+    const apelidos = Object.keys(cfg.tomadores);
+    log('\nClientes:');
+    if (!apelidos.length) log('  (nenhum ainda)');
+    apelidos.forEach((a, i) => log(`  ${i + 1}) ${a.padEnd(12)} ${formatarCnpj(cfg.tomadores[a].cnpj)}  ${cfg.tomadores[a].nome || ''}${a === cfg.tomadorPadrao ? '  (padrão)' : ''}`));
+    const op = (await perguntar('\n  a) adicionar   e) editar   r) remover   p) escolher o padrão   0) voltar\nEscolha', '0')).toLowerCase();
+    if (op === '0' || leitor?.closed) return;
+    if (op === 'a') {
+      const novo = await editarCliente(cfg, '');
+      salvarConfig(cfg);
+      log(`  ✓ Cliente "${novo}" salvo.`);
+      continue;
+    }
+    if (!['e', 'r', 'p'].includes(op)) { log('  Opção inválida.'); continue; }
+    if (!apelidos.length) { log('  Não há clientes ainda: use "a" para adicionar.'); continue; }
+    const r = await perguntar('  Qual cliente? (número ou apelido)');
+    const apelido = /^\d+$/.test(r) ? apelidos[Number(r) - 1] : r.toLowerCase();
+    if (!cfg.tomadores[apelido]) { log('  Cliente não encontrado.'); continue; }
+    if (op === 'e') {
+      const novo = await editarCliente(cfg, apelido);
+      salvarConfig(cfg);
+      log(`  ✓ Cliente "${novo}" salvo.`);
+    } else if (op === 'p') {
+      cfg.tomadorPadrao = apelido;
+      salvarConfig(cfg);
+      log(`  ✓ "${apelido}" é o cliente padrão agora.`);
+    } else if (await simOuNao(`  Remover "${apelido}" (${cfg.tomadores[apelido].nome || formatarCnpj(cfg.tomadores[apelido].cnpj)})?`, 'n')) {
+      delete cfg.tomadores[apelido];
+      if (cfg.tomadorPadrao === apelido) cfg.tomadorPadrao = Object.keys(cfg.tomadores)[0];
+      salvarConfig(cfg);
+      log(`  ✓ "${apelido}" removido. As notas já emitidas para ele não mudam.`);
+    }
+  }
+}
+
+async function menuConfig(cfg) {
+  const cred = require('../src/credencial');
+  for (;;) {
+    const s = cfg.servico;
+    const nClientes = Object.keys(cfg.tomadores).length;
+    log('\nnfse-mei - configuração (cada mudança é salva na hora)');
+    log(`  1) Meus dados    ${formatarCnpj(cfg.prestadorCnpj)}  |  notas em ${cfg.pastaNotas}`);
+    log(`  2) Serviço       ${s.codigoTributacaoNacional} / NBS ${s.nbs} / ${s.municipio}`);
+    log(`  3) Clientes      ${nClientes} cadastrado${nClientes === 1 ? '' : 's'}`);
+    if (cred.SUPORTADO) log(`  4) Senha         ${cred.temCredencial() ? 'guardada' : 'não guardada (login manual)'}`);
+    log('  0) Sair');
+    const op = await perguntar('Escolha', '0');
+    if (op === '0' || leitor?.closed) break;
+    if (op === '1') { await editarPrestador(cfg); salvarConfig(cfg); log('  ✓ Salvo.'); }
+    else if (op === '2') { await editarServico(cfg); salvarConfig(cfg); log('  ✓ Salvo.'); }
+    else if (op === '3') await menuClientes(cfg);
+    else if (op === '4' && cred.SUPORTADO) {
+      const acao = (await perguntar('  g) guardar/trocar a senha   x) apagar a senha   0) voltar\nEscolha', '0')).toLowerCase();
+      if (acao === 'g') await guardarSenha(cfg);
+      else if (acao === 'x' && await simOuNao('  Apagar a senha guardada?', 'n')) { cred.apagarCredencial(); log('  ✓ Senha apagada.'); }
+    } else log('  Opção inválida.');
+  }
+  if (!Object.keys(cfg.tomadores).length) log('\nAtenção: sem nenhum cliente cadastrado o `emitir` não funciona.');
 }
 
 // Cliente, valor e competência são escolhidos a cada nota: pelas opções ou perguntando no terminal.
 async function montarNota(cfg, op) {
   const apelidos = Object.keys(cfg.tomadores);
-  if (!apelidos.length) throw new Error('Nenhum cliente no config. Rode: nfse-mei init');
+  if (!apelidos.length) throw new Error('Nenhum cliente cadastrado. Rode: nfse-mei config');
   let apelido = op.tomador?.toLowerCase();
   if (!apelido) {
     if (apelidos.length === 1 || op.sim) {
@@ -143,6 +245,11 @@ async function montarNota(cfg, op) {
 }
 
 async function emitir(op) {
+  // Primeira vez: faz o cadastro aqui mesmo e segue para a nota (no --sim não há ninguém para responder).
+  if (!op.sim && !require('fs').existsSync(ARQUIVO_CONFIG)) {
+    log('Primeira vez por aqui: antes da nota, vamos cadastrar seus dados.');
+    await init({ seguirParaNota: true });
+  }
   const cfg = carregarConfig();
   if (op.homologacao) cfg.ambiente = 'producaorestrita';
   const nota = await montarNota(cfg, op);
@@ -298,6 +405,7 @@ async function main() {
   const cmd = positionals[0];
   if (op.help || !cmd) return log(AJUDA);
   if (cmd === 'init') return init();
+  if (cmd === 'config') return require('fs').existsSync(ARQUIVO_CONFIG) ? menuConfig(carregarConfig()) : init();
   if (cmd === 'emitir') return emitir(op);
   if (cmd === 'baixar') {
     const cfg = carregarConfig();

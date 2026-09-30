@@ -6,7 +6,7 @@
 $ nfse-mei emitir
 Clientes:
   1) acme: ACME TECNOLOGIA LTDA (11.222.333/0001-81)
-  2) globex: GLOBEX SERVICOS LTDA (44.555.666/0001-77)
+  2) globex: GLOBEX SERVICOS LTDA (11.444.777/0001-61)
 Para qual cliente? (número ou apelido) [acme]: 1
 Valor da nota para ACME TECNOLOGIA LTDA (R$): 1200
 Data de competência (DD/MM/AAAA) [30/09/2026]:
@@ -133,7 +133,9 @@ npm link          # deixa o comando `nfse-mei` disponível em qualquer terminal
 nfse-mei init
 ```
 
-O `init` pergunta, em ordem:
+(Se você pular esta etapa e rodar direto `nfse-mei emitir`, ele percebe que é a primeira vez, faz este mesmo cadastro e segue para a nota.)
+
+Você **não precisa abrir nenhum arquivo**: o `init` pergunta tudo no terminal, uma vez só, e salva. Se digitar algo errado (um CNPJ com dígito trocado, o código fora do formato), ele avisa e pergunta de novo. As perguntas, em ordem:
 
 | Pergunta | Exemplo | Onde achar |
 |---|---|---|
@@ -152,6 +154,29 @@ No fim ele oferece guardar a senha do emissor. No Windows abre uma janela para d
 
 > Não sabe o código ou a NBS? Abra uma nota antiga no portal (Notas emitidas → ⋮ → Visualizar) e copie. Na dúvida sobre qual NBS usar, **pergunte ao seu contador**.
 
+**Mudar algo depois** (um cliente novo, outro CNPJ, trocar a senha): rode `nfse-mei config`. Ele abre um menu e você mexe só no que precisa. Cada mudança é salva na hora.
+
+```text
+$ nfse-mei config
+
+nfse-mei - configuração (cada mudança é salva na hora)
+  1) Meus dados    11.222.333/0001-81  |  notas em C:\Users\voce\Documents\NFSe
+  2) Serviço       01.01.01 / NBS 115022000 / São Paulo/SP
+  3) Clientes      2 cadastrados
+  4) Senha         guardada
+  0) Sair
+Escolha [0]: 3
+
+Clientes:
+  1) acme         11.222.333/0001-81  ACME TECNOLOGIA LTDA  (padrão)
+  2) globex       11.444.777/0001-61  GLOBEX SERVICOS LTDA
+
+  a) adicionar   e) editar   r) remover   p) escolher o padrão   0) voltar
+Escolha [0]:
+```
+
+O cliente **padrão** é o que já vem sugerido no `emitir`. Remover um cliente não mexe nas notas já emitidas para ele.
+
 ### 4. Faça um teste (não emite nada)
 
 ```bash
@@ -169,6 +194,7 @@ nfse-mei emitir --tomador acme           # outro cliente do config
 nfse-mei emitir --competencia 15/10/2026 # outra data de competência
 nfse-mei emitir --ver                    # mostra o Chrome na tela (para acompanhar)
 nfse-mei baixar                          # ajuda a baixar o PDF/XML da última nota e guarda na pasta do mês
+nfse-mei config                          # muda seus dados, o serviço, os clientes ou a senha
 nfse-mei ultimo-dia-util 12/2026         # só mostra a data
 ```
 
@@ -193,11 +219,13 @@ nfse-mei ultimo-dia-util 12/2026         # só mostra a data
 | **Tomador (cliente)** | Lista de clientes (`tomadores`) no config | A cada nota: você escolhe na lista ou usa `--tomador`. O script digita o CNPJ e confere a razão social retornada |
 | **Valor** | Você digita a cada nota (ou `--valor`) | A cada nota. Não fica salvo em lugar nenhum além do `historico.csv` |
 | **Competência** | Você confirma a cada nota (ou `--competencia`) | A cada nota. A sugestão é o último dia útil do mês, pulando fins de semana e feriados nacionais |
-| **Município, código, NBS, descrição** | `servico` no config | Fixos; mude com `nfse-mei init` |
+| **Município, código, NBS, descrição** | `servico` no config | Fixos; mude com `nfse-mei config` |
 | **Tributos aproximados** | `tributosAproximados` (padrão `3` = não informar) | Fixo |
 | **IBS/CBS** | Sempre "Não preencher" | Opcional para MEI em 2026 |
 
 ## Configuração (config.json)
+
+O normal é usar `nfse-mei init` e `nfse-mei config`: você não precisa editar este arquivo. Ele fica aqui para quem quiser ver ou fazer backup.
 
 Fica em `%APPDATA%\nfse-mei\config.json` no Windows e em `~/.config/nfse-mei/config.json` no macOS. Dá para apontar outro arquivo com a variável `NFSE_MEI_CONFIG`. Exemplo completo em [`config.example.json`](config.example.json):
 
@@ -216,7 +244,7 @@ Fica em `%APPDATA%\nfse-mei\config.json` no Windows e em `~/.config/nfse-mei/con
   "tomadorPadrao": "acme",
   "tomadores": {
     "acme": { "cnpj": "11222333000181", "nome": "ACME TECNOLOGIA LTDA" },
-    "globex": { "cnpj": "44555666000177", "nome": "GLOBEX SERVICOS LTDA" }
+    "globex": { "cnpj": "11444777000161", "nome": "GLOBEX SERVICOS LTDA" }
   }
 }
 ```
@@ -283,13 +311,13 @@ Quando dá erro, o script salva um print da tela em `ultimo-erro.png`, na mesma 
 ## Contribuindo
 
 ```bash
-npm test                         # testes de datas, valores e da vigia de downloads
+npm test                         # testes de datas, valores, cadastro e da vigia de downloads
 nfse-mei emitir --teste --ver    # roda o fluxo mostrando o Chrome, sem emitir
 ```
 
 Estrutura:
 
-- `bin/nfse-mei.js`: CLI (init, senha, emitir, baixar)
+- `bin/nfse-mei.js`: CLI (init, config, senha, emitir, baixar)
 - `src/portal.js`: toda a automação do portal (seletores, retentativas, revisão)
 - `src/datas.js`: último dia útil e feriados nacionais
 - `src/valores.js`: dinheiro e CNPJ

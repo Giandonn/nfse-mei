@@ -7,7 +7,7 @@ const { ARQUIVO_CONFIG } = require('./config');
 
 const ARQUIVO = path.join(path.dirname(ARQUIVO_CONFIG), 'credencial.xml');
 const SERVICO_KEYCHAIN = 'nfse-mei';
-const SUPORTADO = ['win32', 'darwin'].includes(process.platform);
+const SUPORTADO = !process.env.NFSE_MEI_SEM_COFRE && ['win32', 'darwin'].includes(process.platform);
 const ONDE = process.platform === 'darwin'
   ? 'no Keychain do macOS (item "nfse-mei")'
   : `em ${ARQUIVO} (criptografada com seu usuário do Windows)`;
