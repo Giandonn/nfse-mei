@@ -39,10 +39,45 @@ A cada nota você informa só **cliente, valor e data**, e o script sugere a dat
 
 ---
 
+## Requisitos
+
+Antes de instalar, confira se você tem tudo isto:
+
+**Sua situação**
+
+- [ ] Ser **MEI** e emitir NFS-e pelo **Emissor Nacional** ([nfse.gov.br](https://www.nfse.gov.br/EmissorNacional)). Se o seu município ainda usa um sistema próprio de nota, este projeto não serve.
+- [ ] Cliente (tomador) **com CNPJ no Brasil**. Nota para pessoa física ou para o exterior ainda não é suportada.
+
+**Acesso ao portal**
+
+- [ ] **Senha de primeiro acesso do Emissor Nacional.** Ela é diferente da conta gov.br. O script entra com **CNPJ + essa senha**, porque o gov.br bloqueia automação com captcha e 2FA. Se você ainda não tem, crie antes (ver o [passo 1](#1-crie-a-senha-do-emissor-nacional-uma-vez-só)). Vai precisar de:
+  - CPF e data de nascimento
+  - **Número do título de eleitor** (dá pra ver no app **e-Título**)
+  - Acesso ao e-mail cadastrado, para receber o código de confirmação
+
+**Dados da nota** (o `nfse-mei init` pergunta)
+
+- [ ] **Seu CNPJ** do MEI
+- [ ] **Município** onde o serviço é prestado
+- [ ] **Código de Tributação Nacional** e **código da NBS** do seu serviço. Dá pra copiar de uma nota antiga ou perguntar ao seu contador.
+- [ ] **Descrição do serviço** que vai na nota
+- [ ] **CNPJ e razão social** de cada cliente
+
+O valor e a data não entram aqui: eles são perguntados a cada nota.
+
+**No computador**
+
+- [ ] **Windows 10/11**. A senha fica guardada com a criptografia do Windows (DPAPI). Linux/macOS: veja [Limitações](#limitações).
+- [ ] [**Node.js 20+**](https://nodejs.org). Confira com `node -v`.
+- [ ] [**Git**](https://git-scm.com) para clonar o projeto. Confira com `git --version`.
+- [ ] [**Google Chrome**](https://www.google.com/chrome/) instalado
+
+---
+
 ## Índice
 
-- [Como funciona](#como-funciona)
 - [Requisitos](#requisitos)
+- [Como funciona](#como-funciona)
 - [Instalação passo a passo](#instalação-passo-a-passo)
 - [Uso no dia a dia](#uso-no-dia-a-dia)
 - [De onde vem cada dado da nota](#de-onde-vem-cada-dado-da-nota)
@@ -67,14 +102,6 @@ O `nfse-mei` usa o Google Chrome instalado na sua máquina, controlado pelo [Pla
 6. **Registro e download:** apita, mostra a chave de acesso e anota a nota em `historico.csv`. Depois abre a lista de notas no seu navegador para você passar pelo captcha e [baixar o PDF](#baixar-o-pdf-e-o-xml). O script pega o arquivo em Downloads e guarda na pasta do mês.
 
 Até o passo 5 nada é enviado ao governo. Se o portal falhar no meio do caminho (ele cai bastante no fim do mês), o script tenta de novo e, se preciso, recomeça do login.
-
-## Requisitos
-
-- **MEI** que emite NFS-e pelo **Emissor Nacional** (nfse.gov.br). Se o seu município ainda usa um sistema próprio, este projeto não serve.
-- **Windows 10/11**. A senha é guardada com a criptografia do Windows (DPAPI). Linux/macOS: veja [Limitações](#limitações).
-- [**Node.js 20+**](https://nodejs.org)
-- [**Google Chrome**](https://www.google.com/chrome/) instalado
-- A **senha do Emissor Nacional**, que é diferente da conta gov.br (veja o passo 1 abaixo)
 
 ## Instalação passo a passo
 
