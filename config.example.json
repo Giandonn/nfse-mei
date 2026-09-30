@@ -1,0 +1,19 @@
+{
+  "prestadorCnpj": "11222333000181",
+  "ambiente": "producao",
+  "pastaNotas": "~/Documents/NFSe",
+  "servico": {
+    "municipio": "São Paulo/SP",
+    "codigoTributacaoNacional": "01.01.01",
+    "nbs": "115022000",
+    "descricao": "Análise e desenvolvimento de sistemas"
+  },
+  "tributosAproximados": 3,
+  "tomadorPadrao": "acme",
+  "tomadores": {
+    "acme": {
+      "cnpj": "11222333000181",
+      "nome": "ACME TECNOLOGIA LTDA"
+    }
+  }
+}
