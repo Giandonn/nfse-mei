@@ -30,9 +30,16 @@ function carregarConfig() {
   return cfg;
 }
 
-function salvarConfig(cfg) {
-  fs.mkdirSync(path.dirname(ARQUIVO_CONFIG), { recursive: true });
-  fs.writeFileSync(ARQUIVO_CONFIG, JSON.stringify(cfg, null, 2) + '\n');
+// Pasta só do seu usuário (700) no macOS/Linux: config, histórico e a sessão do Chrome ficam aqui.
+// No Windows a pasta do usuário (%APPDATA%) já é privada e o chmod não tem efeito.
+function criarPastaPrivada(pasta) {
+  fs.mkdirSync(pasta, { recursive: true, mode: 0o700 });
+  if (process.platform !== 'win32') fs.chmodSync(pasta, 0o700);
 }
 
-module.exports = { ARQUIVO_CONFIG, PERFIL_CHROME, AMBIENTES, carregarConfig, salvarConfig, expandirHome };
+function salvarConfig(cfg) {
+  criarPastaPrivada(path.dirname(ARQUIVO_CONFIG));
+  fs.writeFileSync(ARQUIVO_CONFIG, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+}
+
+module.exports = { ARQUIVO_CONFIG, PERFIL_CHROME, AMBIENTES, carregarConfig, salvarConfig, expandirHome, criarPastaPrivada };

@@ -1,4 +1,8 @@
 node_modules/
 config.json
+credencial.xml
+perfil-chrome/
+historico.csv
+ultimo-erro.png
 *.pdf
 *.xml

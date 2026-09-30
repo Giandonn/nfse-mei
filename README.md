@@ -67,7 +67,7 @@ O valor e a data não entram aqui: eles são perguntados a cada nota.
 
 **No computador**
 
-- [ ] **Windows 10/11**. A senha fica guardada com a criptografia do Windows (DPAPI). Linux/macOS: veja [Limitações](#limitações).
+- [ ] **Windows 10/11 ou macOS**. A senha fica guardada no cofre do sistema: DPAPI no Windows, **Keychain** no macOS. Linux: veja [Limitações](#limitações).
 - [ ] [**Node.js 20+**](https://nodejs.org). Confira com `node -v`.
 - [ ] [**Git**](https://git-scm.com) para clonar o projeto. Confira com `git --version`.
 - [ ] [**Google Chrome**](https://www.google.com/chrome/) instalado
@@ -125,6 +125,8 @@ npm install
 npm link          # deixa o comando `nfse-mei` disponível em qualquer terminal
 ```
 
+> **macOS:** se o `npm link` der erro de permissão (`EACCES`), rode `sudo npm link`. Isso acontece quando o Node foi instalado pelo instalador do site; com Homebrew (`brew install node`) não precisa.
+
 ### 3. Configure seus dados
 
 ```bash
@@ -146,7 +148,7 @@ O `init` pergunta, em ordem:
 
 O **valor não fica no config**: ele é perguntado a cada nota.
 
-No fim ele oferece guardar a senha do emissor, abrindo uma janela do Windows. Dá pra fazer isso depois com `nfse-mei senha`.
+No fim ele oferece guardar a senha do emissor. No Windows abre uma janela para digitar; no macOS o terminal pede a senha (ela não aparece enquanto você digita) e pede de novo para confirmar. Dá pra fazer isso depois com `nfse-mei senha`.
 
 > Não sabe o código ou a NBS? Abra uma nota antiga no portal (Notas emitidas → ⋮ → Visualizar) e copie. Na dúvida sobre qual NBS usar, **pergunte ao seu contador**.
 
@@ -197,7 +199,7 @@ nfse-mei ultimo-dia-util 12/2026         # só mostra a data
 
 ## Configuração (config.json)
 
-Fica em `%APPDATA%\nfse-mei\config.json`. Dá para apontar outro arquivo com a variável `NFSE_MEI_CONFIG`. Exemplo completo em [`config.example.json`](config.example.json):
+Fica em `%APPDATA%\nfse-mei\config.json` no Windows e em `~/.config/nfse-mei/config.json` no macOS. Dá para apontar outro arquivo com a variável `NFSE_MEI_CONFIG`. Exemplo completo em [`config.example.json`](config.example.json):
 
 ```json
 {
@@ -255,12 +257,18 @@ O portal exige um **captcha ("Sou humano")** para baixar o DANFSe (PDF) e o XML.
 | `A revisão não bate com o esperado` | Algo ficou diferente na tela final | Nada foi emitido. Rode com `--ver` para ver onde |
 | Captcha inválido no gov.br | O gov.br bloqueia navegador automatizado | Use o login por CNPJ + senha do emissor |
 
-Quando dá erro, o script salva um print da tela em `%APPDATA%\nfse-mei\ultimo-erro.png`.
+Quando dá erro, o script salva um print da tela em `ultimo-erro.png`, na mesma pasta do config.
 
 ## Segurança e privacidade
 
-- A senha fica em `%APPDATA%\nfse-mei\credencial.xml`, criptografada com **DPAPI**: só o seu usuário do Windows, nesta máquina, consegue ler. Ela nunca aparece no terminal nem em arquivo aberto.
-- O Chrome usa um **perfil próprio** (`%APPDATA%\nfse-mei\perfil-chrome`), separado do seu navegador.
+- A senha fica no cofre do sistema, e só o seu usuário, nesta máquina, consegue ler:
+  - **Windows:** `%APPDATA%\nfse-mei\credencial.xml`, criptografada com **DPAPI**.
+  - **macOS:** no **Keychain** (app Acesso às Chaves), item `nfse-mei`.
+
+  Ela nunca aparece no terminal, na linha de comando nem em arquivo aberto.
+- A senha só é digitada na página de login do próprio `nfse.gov.br`. Se o portal redirecionar para outro endereço, o script para sem digitar.
+- O Chrome usa um **perfil próprio** (`perfil-chrome`, na pasta do config), separado do seu navegador. O gerenciador de senhas do Chrome fica **desligado** nesse perfil, e qualquer senha que ele tenha guardado é apagada a cada execução. Assim não existe uma segunda cópia da senha fora do cofre do sistema.
+- No macOS/Linux a pasta do config é criada só para o seu usuário (permissão `700`). Ela guarda a sessão do portal e o histórico de notas.
 - O script só conversa com `nfse.gov.br`. Não há telemetria nem servidor intermediário.
 - `config.json`, PDFs e XMLs estão no `.gitignore`. **Não commite seus dados.**
 
@@ -269,7 +277,7 @@ Quando dá erro, o script salva um print da tela em `%APPDATA%\nfse-mei\ultimo-e
 - **Só o caso mais comum do MEI:** tomador com CNPJ no Brasil, sem retenção, sem dedução, sem intermediário e sem IBS/CBS.
 - **Depende do layout do portal** (mapeado na versão 1.6.0.0). Se o governo mudar a tela, os seletores em `src/portal.js` precisam de ajuste. Abra uma issue.
 - **Download com captcha:** manual, veja acima.
-- **Guardar a senha** só funciona no Windows. No Linux/macOS o resto funciona, mas o login fica manual (rode com `--ver` e entre na janela).
+- **Guardar a senha** funciona no Windows e no macOS. No Linux o resto funciona, mas o login fica manual (rode com `--ver` e entre na janela).
 - **Futuro:** emitir pela [API oficial da NFS-e](https://www.gov.br/nfse) com certificado digital A1, sem navegador e sem captcha.
 
 ## Contribuindo
@@ -285,7 +293,7 @@ Estrutura:
 - `src/portal.js`: toda a automação do portal (seletores, retentativas, revisão)
 - `src/datas.js`: último dia útil e feriados nacionais
 - `src/valores.js`: dinheiro e CNPJ
-- `src/credencial.js`: senha com DPAPI
+- `src/credencial.js`: senha no cofre do sistema (DPAPI no Windows, Keychain no macOS)
 - `src/downloads.js`: vigia a pasta Downloads e guarda os arquivos na pasta do mês
 - `src/config.js`: onde fica cada arquivo
 

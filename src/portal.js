@@ -3,14 +3,34 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright-core');
-const { PERFIL_CHROME, AMBIENTES } = require('./config');
+const { PERFIL_CHROME, AMBIENTES, criarPastaPrivada } = require('./config');
 const { formatarValor, soDigitos, formatarCnpj } = require('./valores');
 
 const MINUTOS = 60 * 1000;
 
+// A senha só pode existir no cofre do sistema (src/credencial.js). O gerenciador de senhas do
+// Chrome guardaria uma segunda cópia no perfil ao ver o login preenchido, então ele fica
+// desligado e qualquer senha que ele já tenha guardado é apagada antes de abrir.
+function semGerenciadorDeSenhas(perfil) {
+  const pastaDefault = path.join(perfil, 'Default');
+  criarPastaPrivada(pastaDefault);
+  for (const nome of fs.readdirSync(pastaDefault)) {
+    // Arquivo preso = outro Chrome do nfse-mei aberto; o launch abaixo avisa com a mensagem certa.
+    if (/^Login Data/i.test(nome)) try { fs.rmSync(path.join(pastaDefault, nome), { force: true }); } catch { /* em uso */ }
+  }
+  const arqPrefs = path.join(pastaDefault, 'Preferences');
+  let prefs = {};
+  try { prefs = JSON.parse(fs.readFileSync(arqPrefs, 'utf8')); } catch { /* perfil novo */ }
+  prefs.credentials_enable_service = false;
+  prefs.credentials_enable_autosignin = false;
+  prefs.profile = { ...prefs.profile, password_manager_enabled: false };
+  fs.writeFileSync(arqPrefs, JSON.stringify(prefs), { mode: 0o600 });
+}
+
 // Por padrão o Chrome roda invisível (headless); `visivel` mostra a janela para acompanhar/depurar.
 async function abrirNavegador({ visivel = false } = {}) {
-  fs.mkdirSync(PERFIL_CHROME, { recursive: true });
+  criarPastaPrivada(PERFIL_CHROME);
+  semGerenciadorDeSenhas(PERFIL_CHROME);
   // Perfil próprio: a sessão do portal fica guardada entre execuções enquanto durar.
   const ctx = await chromium.launchPersistentContext(PERFIL_CHROME, {
     channel: 'chrome',
@@ -65,9 +85,19 @@ async function garantirLogin(page, base, log) {
   const cred = require('./credencial');
   if (cred.temCredencial()) {
     log('Entrando com CNPJ + senha do emissor...');
+    // A senha só é digitada na página de login do próprio portal (nunca num redirecionamento para outro site).
+    const aqui = new URL(page.url());
+    if (aqui.origin !== new URL(base).origin || !/\/EmissorNacional\/Login/i.test(aqui.pathname)) {
+      throw new Error(`Página de login inesperada (${aqui.origin}${aqui.pathname}); por segurança a senha não foi digitada.`);
+    }
     const { usuario, senha } = cred.lerCredencial();
-    await page.locator('#Inscricao').fill(soDigitos(usuario));
-    await page.locator('#Senha').fill(senha);
+    try {
+      await page.locator('#Inscricao').fill(soDigitos(usuario));
+      await page.locator('#Senha').fill(senha);
+    } catch {
+      // Mensagem própria: a do Playwright pode trazer detalhes da chamada, e ela vai para o terminal.
+      throw new Error('Não consegui preencher o login do portal (a tela mudou?). Rode com --ver para ver.');
+    }
     await page.locator('form[action*="Login"] button[type=submit]').click();
     await page.waitForLoadState('domcontentloaded');
     const falhou = page.getByText(/Usuário e\/ou senha inválidos/i);

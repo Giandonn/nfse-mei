@@ -96,9 +96,9 @@ async function init() {
   log(`\nConfig salvo em ${ARQUIVO_CONFIG}`);
 
   const cred = require('../src/credencial');
-  if (process.platform === 'win32' && (await perguntar('\n4) Guardar agora a senha do Emissor Nacional? (S/n)', 's')).toLowerCase() !== 'n') {
+  if (cred.SUPORTADO && (await perguntar('\n4) Guardar agora a senha do Emissor Nacional? (S/n)', 's')).toLowerCase() !== 'n') {
     cred.salvarCredencial(cfg.prestadorCnpj);
-    log(`Senha guardada em ${cred.ARQUIVO}`);
+    log(`Senha guardada ${cred.ONDE}.`);
   }
   log('\nPróximo passo: nfse-mei emitir --teste');
 }
@@ -319,9 +319,11 @@ async function main() {
     try { padrao = carregarConfig().prestadorCnpj || ''; } catch { /* sem config ainda */ }
     const cnpj = soDigitos(positionals[1] || (await perguntar('CNPJ do seu MEI (só números)', padrao)));
     if (cnpj.length !== 14) throw new Error('CNPJ precisa ter 14 dígitos');
-    log('Abrindo a janela do Windows para digitar a senha...');
+    log(process.platform === 'darwin'
+      ? 'Digite a senha do Emissor Nacional (não aparece na tela) e repita para confirmar:'
+      : 'Abrindo a janela do Windows para digitar a senha...');
     cred.salvarCredencial(cnpj);
-    return log(`Senha guardada (criptografada com seu usuário do Windows) em ${cred.ARQUIVO}`);
+    return log(`Senha guardada ${cred.ONDE}.`);
   }
   if (cmd === 'ultimo-dia-util') {
     const [m, a] = (positionals[1] || '').split('/').map(Number);
