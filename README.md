@@ -1,7 +1,7 @@
 # nfse-mei
 
 [![testes](https://github.com/Giandonn/nfse-mei/actions/workflows/testes.yml/badge.svg)](https://github.com/Giandonn/nfse-mei/actions/workflows/testes.yml)
-[![npm](https://img.shields.io/npm/v/nfse-mei?logo=npm)](https://www.npmjs.com/package/nfse-mei)
+[![npm](https://img.shields.io/badge/npm-nfse--mei-CB3837?logo=npm)](https://www.npmjs.com/package/nfse-mei)
 
 **Emita a NFS-e do seu MEI com um comando.** O `nfse-mei` preenche por você o [Emissor Nacional da NFS-e](https://www.nfse.gov.br/EmissorNacional) (o portal do governo), confere tudo e só emite depois do seu OK.
 
