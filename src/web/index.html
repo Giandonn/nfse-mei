@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>nfse-mei</title>
+  <link rel="stylesheet" href="/estilo.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f6f5c'/%3E%3Cpath d='M9 8h10l4 4v12H9z' fill='white'/%3E%3Cpath d='M12 16h8M12 20h6' stroke='%231f6f5c' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <strong>nfse-mei</strong>
+        <small id="versao"></small>
+      </div>
+    </div>
+    <nav id="abas" class="abas" aria-label="Seções"></nav>
+    <div id="status-piloto" class="pilula"></div>
+  </header>
+
+  <main id="conteudo" class="conteudo" aria-live="polite">
+    <p class="carregando">Carregando…</p>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-caixa" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+      <div id="modal-corpo"></div>
+    </div>
+  </div>
+
+  <div id="aviso" class="aviso" role="status" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

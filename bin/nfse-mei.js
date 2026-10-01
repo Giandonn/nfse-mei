@@ -10,6 +10,7 @@ const AJUDA = `
 nfse-mei - emite a NFS-e do MEI no Emissor Nacional (nfse.gov.br)
 
 Uso:
+  nfse-mei abrir                    abre o PAINEL no navegador (cadastro, clientes, automação, e-mail, notas)
   nfse-mei init                     primeiro cadastro, passo a passo (seus dados, serviço e clientes)
   nfse-mei config                   menu para mudar seus dados, o serviço, os clientes e a senha
   nfse-mei senha [CNPJ]             guarda a senha do emissor (login automático)
@@ -552,13 +553,53 @@ async function comandoEmail(sub, arg) {
   throw new Error(`Uso: nfse-mei email [teste | enviar <número>]`);
 }
 
+// Painel no navegador: o servidor vive enquanto a aba estiver aberta (a página avisa a cada 15s).
+async function abrirPainel(op) {
+  const { criarServidor } = require('../src/servidor');
+  const real = require('../src/rotina-real');
+  const cred = require('../src/credencial');
+  const email = require('../src/email');
+  const { numeroDaChave } = require('../src/historico');
+  const logArquivo = msg => require('fs').appendFileSync(require('path').join(require('path').dirname(ARQUIVO_CONFIG), 'rotina.log'), `${new Date().toISOString()}  [painel] ${msg}\n`);
+  const painel = criarServidor({
+    log: logArquivo,
+    emitir: (dados, { teste }) => real.emitirComoSubprocesso(dados, { teste, log: logArquivo }),
+    sincronizar: (cfg, de, ate) => real.sincronizarDoPortal(cfg, de, ate, logArquivo),
+    testarEmail: cfg => email.testarLogin(cfg, cred.lerCredencial('email').senha),
+    emailTeste: async cfg => {
+      const r = await email.enviarNota({ ...cfg, email: { ...cfg.email, copiaParaMim: false } }, cred.lerCredencial('email').senha, {
+        tomador: { email: cfg.email.remetente, nome: 'CLIENTE DE EXEMPLO LTDA', cnpj: '11222333000181' },
+        chave: '0'.repeat(50), numero: 'EXEMPLO', centavos: 123456, competencia: formatarBR(ultimoDiaUtil(hojeReal().getFullYear(), hojeReal().getMonth() + 1)),
+      });
+      return r.para.join(', ');
+    },
+    enviarNota: (cfg, apelido, chave, centavos, competencia) => email.enviarNota(cfg, cred.lerCredencial('email').senha,
+      { tomador: cfg.tomadores[apelido], chave, numero: numeroDaChave(chave), centavos, competencia }),
+  });
+  const { url } = await painel.iniciar();
+  log('Painel do nfse-mei aberto no seu navegador.');
+  log(`Se não abriu, copie este endereço (só funciona neste computador):\n  ${url}`);
+  log('\nDeixe este terminal aberto enquanto usa o painel. Ele fecha sozinho quando você fechar a aba (ou Ctrl+C).');
+  if (!op['sem-navegador']) require('../src/portal').abrirNoNavegadorPadrao(url);
+  await new Promise(resolve => {
+    const relogio = setInterval(() => {
+      if (Date.now() - painel.ultimaAtividade() > 90000) {
+        clearInterval(relogio);
+        log('\nAba fechada: painel encerrado.');
+        painel.parar().then(resolve);
+      }
+    }, 5000);
+    process.once('SIGINT', () => { clearInterval(relogio); painel.parar().then(resolve); });
+  });
+}
+
 async function main() {
   const { values: op, positionals } = parseArgs({
     allowPositionals: true,
     options: {
       tomador: { type: 'string' }, valor: { type: 'string' }, competencia: { type: 'string' },
       teste: { type: 'boolean' }, sim: { type: 'boolean' }, homologacao: { type: 'boolean' }, ver: { type: 'boolean' },
-      'sem-baixar': { type: 'boolean' },
+      'sem-baixar': { type: 'boolean' }, 'sem-navegador': { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -597,6 +638,7 @@ async function main() {
     cred.salvarCredencial(cnpj);
     return log(`Senha guardada ${cred.ONDE}.`);
   }
+  if (cmd === 'abrir') return abrirPainel(op);
   if (cmd === 'painel') return log(require('../src/painel').textoPainel(carregarConfig()));
   if (cmd === 'relatorio') {
     const ano = Number(positionals[1]) || hojeReal().getFullYear() - 1;

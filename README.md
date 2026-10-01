@@ -12,7 +12,9 @@ No ano: R$ 38.000,00 de R$ 81.000,00 (47%)
 Enviei para financeiro@acme.com.br
 ```
 
-Sem automação, ele também funciona do jeito clássico: você roda um comando e confirma.
+![Painel do nfse-mei: faturamento do ano, próximas notas e próximo DAS](.github/painel.png)
+
+Tudo se configura num **painel no navegador** (`nfse-mei abrir`): seus dados, clientes, se a nota sai sozinha, para qual e-mail vai. Quem prefere o terminal tem todos os comandos também.
 
 ```text
 $ nfse-mei emitir
@@ -55,10 +57,10 @@ Já tem Node.js 20+, Google Chrome e a [senha do Emissor Nacional](#1-crie-a-sen
 
 ```bash
 npm install -g nfse-mei     # 1. instala
-nfse-mei emitir --teste     # 2. cadastra seus dados (só na primeira vez) e testa sem emitir
-nfse-mei emitir             # 3. emite de verdade
-nfse-mei agendar            # 4. (opcional) piloto automático: nota do mês, DAS e limite
+nfse-mei abrir              # 2. abre o painel: cadastre seus dados, clientes e ligue o piloto automático
 ```
+
+Prefere o terminal? `nfse-mei emitir --teste` cadastra e testa sem emitir, `nfse-mei emitir` emite e `nfse-mei agendar` liga o piloto automático.
 
 Falta alguma coisa? Veja os [requisitos](#requisitos) logo abaixo ou rode `nfse-mei doutor`, que diz o que falta.
 
@@ -103,6 +105,7 @@ O valor e a data não entram aqui: eles são perguntados a cada nota.
 - [Requisitos](#requisitos)
 - [Como funciona](#como-funciona)
 - [Instalação passo a passo](#instalação-passo-a-passo)
+- [O painel](#o-painel)
 - [Uso no dia a dia](#uso-no-dia-a-dia)
 - [Piloto automático](#piloto-automático)
 - [Seu MEI: painel, limite e declaração anual](#seu-mei-painel-limite-e-declaração-anual)
@@ -227,6 +230,33 @@ nfse-mei emitir --teste
 ```
 
 Ele loga, preenche tudo, confere a revisão e **para sem emitir**. Se aparecer `MODO TESTE: tudo preenchido e conferido`, está pronto. Fica um rascunho no portal, que você pode ignorar.
+
+## O painel
+
+```bash
+nfse-mei abrir
+```
+
+Abre no seu navegador um painel com tudo num lugar só:
+
+| Tela | O que tem |
+|---|---|
+| **Início** | Faturamento do ano x limite do MEI (com gráfico por mês e projeção), próximas notas do piloto automático, próximo DAS, botões para emitir uma nota avulsa (ou só testar) e sincronizar com o portal |
+| **Clientes** | Adicionar, editar e remover. Em cada um: **nota todo mês**, valor fixo, **emitir sozinho** (ou 1 clique) e o **e-mail** que recebe a nota |
+| **Meus dados** | Seu CNPJ, pasta das notas, serviço (município, código, NBS, descrição) e a senha do emissor |
+| **Automação e e-mail** | Ligar/desligar o piloto automático e o lembrete do DAS, configurar o e-mail, mandar um e-mail de teste e ver o que a rotina fez |
+| **Notas** | As últimas notas, inclusive as feitas no portal e as canceladas |
+
+Na primeira vez, o painel abre direto no cadastro. Ele valida tudo como o terminal: CNPJ pelos dígitos verificadores, código no formato `00.00.00`, NBS com 9 números, e-mails, valor.
+
+**Segurança do painel** (ele mexe com emissão de nota fiscal):
+
+- Roda **só no seu computador** (`127.0.0.1`, porta aleatória). Nada de fora alcança.
+- Cada abertura gera um **código secreto** no endereço; sem ele, o painel não abre e a API não responde. O código sai da barra de endereço assim que a página carrega.
+- **Outros sites não conseguem usá-lo**: ele confere a origem e o endereço de cada chamada (o que bloqueia também o ataque de "DNS rebinding") e não carrega nada da internet.
+- **As senhas nunca passam pelo navegador.** O painel só mostra "guardada ✓". Para guardar ou trocar, abre a janela do Windows, ou, no macOS, pede no terminal onde você rodou `nfse-mei abrir`.
+- **Emitir de verdade** pelo painel exige digitar `EMITIR`. "Testar sem emitir" faz tudo no portal e para antes.
+- Ele **se desliga sozinho** cerca de 1 minuto depois que você fecha a aba.
 
 ## Uso no dia a dia
 
@@ -453,6 +483,8 @@ Estrutura:
 - `src/historico.js`: notas emitidas (CSV) + lista do portal; nunca emitir duas vezes
 - `src/painel.js`: limite do MEI, projeção, DAS e relatório da DASN-SIMEI
 - `src/email.js`: e-mail da nota para o cliente
+- `src/servidor.js` + `src/web/`: o painel no navegador (servidor local e a página)
+- `src/cadastro.js`: regras e validações do cadastro usadas pelo painel
 - `src/datas.js`: último dia útil e feriados nacionais
 - `src/valores.js`: dinheiro e CNPJ
 - `src/credencial.js`: senha no cofre do sistema (DPAPI no Windows, Keychain no macOS)
