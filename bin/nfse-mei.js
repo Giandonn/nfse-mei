@@ -3,7 +3,7 @@
 const { parseArgs } = require('util');
 const readline = require('readline');
 const { ARQUIVO_CONFIG, AMBIENTES, carregarConfig, salvarConfig, expandirHome } = require('../src/config');
-const { ultimoDiaUtil, formatarBR, parseBR, iso } = require('../src/datas');
+const { ultimoDiaUtil, formatarBR, parseBR, iso, hoje: hojeReal } = require('../src/datas');
 const { parseValor, formatarValor, soDigitos, formatarCnpj, cnpjValido } = require('../src/valores');
 
 const AJUDA = `
@@ -17,6 +17,18 @@ Uso:
   nfse-mei emitir [opções]          pergunta cliente/valor/competência, preenche e emite
   nfse-mei doutor                   confere se está tudo pronto (Node, Chrome, cadastro, senha, portal)
   nfse-mei baixar [chave]           ajuda a baixar o PDF/XML (padrão: a última nota) e guarda na pasta do mês
+
+Piloto automático:
+  nfse-mei agendar                  liga a rotina diária (nota do mês, lembrete do DAS, limite do MEI)
+  nfse-mei agendar remover          desliga a rotina
+  nfse-mei rotina [--teste]         roda a rotina agora (com --teste preenche e confere, mas não emite)
+  nfse-mei email                    configura o envio da nota por e-mail para o cliente
+  nfse-mei email enviar <número>    manda (de novo) uma nota por e-mail
+
+Seu MEI:
+  nfse-mei painel                   faturamento do ano x limite do MEI, projeção e próximo DAS
+  nfse-mei relatorio [ano]          números para a declaração anual (DASN-SIMEI); padrão: ano passado
+  nfse-mei sincronizar [ano]        lê a lista de notas do portal (inclui as feitas à mão e as canceladas)
   nfse-mei ultimo-dia-util [MM/AAAA]
 
 Opções do emitir:
@@ -102,11 +114,28 @@ async function editarCliente(cfg, apelidoAtual) {
   })).toLowerCase();
   const cnpj = soDigitos(await perguntarValido('  CNPJ do cliente', t.cnpj, validarCnpj));
   const nome = await perguntar('  Razão social do cliente (o script confere com o portal)', t.nome);
+  const { emailsValidos } = require('../src/email');
+  const respostaEmail = await perguntarValido(`  E-mail do cliente para mandar a nota (vários: separe por vírgula; vazio = não manda${t.email ? '; - apaga' : ''})`, t.email || '',
+    r => (!r || r === '-' || emailsValidos(r) ? null : 'e-mail inválido'));
+  const email = respostaEmail === '-' ? '' : respostaEmail;
+  let mensal;
+  if (await simOuNao('  Nota todo mês para este cliente (lembrete ou emissão automática)?', t.mensal?.ativo ? 's' : 'n')) {
+    const valor = await perguntarValido('    Valor fixo por mês (vazio = digitar a cada mês)', t.mensal?.valor || '', r => {
+      if (!r) return null;
+      try { parseValor(r); return null; } catch { return 'valor inválido (ex: 3500 ou 3.500,00)'; }
+    });
+    const automatico = valor
+      ? await simOuNao('    Emitir SOZINHO no último dia útil, sem perguntar? (você recebe um aviso depois)', t.mensal?.automatico ? 's' : 'n')
+      : false;
+    mensal = { ativo: true, valor: valor ? formatarValor(parseValor(valor)) : '', automatico };
+  }
   if (apelidoAtual && apelidoAtual !== apelido) {
     delete cfg.tomadores[apelidoAtual];
     if (cfg.tomadorPadrao === apelidoAtual) cfg.tomadorPadrao = apelido;
   }
   cfg.tomadores[apelido] = { cnpj, nome };
+  if (email) cfg.tomadores[apelido].email = email;
+  if (mensal) cfg.tomadores[apelido].mensal = mensal;
   cfg.tomadorPadrao = cfg.tomadorPadrao || apelido;
   return apelido;
 }
@@ -150,7 +179,13 @@ async function menuClientes(cfg) {
     const apelidos = Object.keys(cfg.tomadores);
     log('\nClientes:');
     if (!apelidos.length) log('  (nenhum ainda)');
-    apelidos.forEach((a, i) => log(`  ${i + 1}) ${a.padEnd(12)} ${formatarCnpj(cfg.tomadores[a].cnpj)}  ${cfg.tomadores[a].nome || ''}${a === cfg.tomadorPadrao ? '  (padrão)' : ''}`));
+    apelidos.forEach((a, i) => {
+      const t = cfg.tomadores[a];
+      const extras = [a === cfg.tomadorPadrao && 'padrão',
+        t.mensal?.ativo && `todo mês${t.mensal.valor ? ` R$ ${t.mensal.valor}` : ''}${t.mensal.automatico ? ', automática' : ''}`,
+        t.email && `e-mail ${t.email}`].filter(Boolean);
+      log(`  ${i + 1}) ${a.padEnd(12)} ${formatarCnpj(t.cnpj)}  ${t.nome || ''}${extras.length ? `  (${extras.join(' · ')})` : ''}`);
+    });
     const op = (await perguntar('\n  a) adicionar   e) editar   r) remover   p) escolher o padrão   0) voltar\nEscolha', '0')).toLowerCase();
     if (op === '0' || leitor?.closed) return;
     if (op === 'a') {
@@ -191,12 +226,27 @@ async function menuConfig(cfg) {
     log(`  2) Serviço       ${s.codigoTributacaoNacional} / NBS ${s.nbs} / ${s.municipio}`);
     log(`  3) Clientes      ${nClientes} cadastrado${nClientes === 1 ? '' : 's'}`);
     if (cred.SUPORTADO) log(`  4) Senha         ${cred.temCredencial() ? 'guardada' : 'não guardada (login manual)'}`);
+    const agenda = require('../src/agenda').situacao();
+    log(`  5) Automação    ${agenda.ligada ? 'ligada' : 'desligada'} · lembrete do DAS ${cfg.automacao?.das === false ? 'desligado' : 'ligado'}`);
+    log(`  6) E-mail        ${cfg.email?.remetente ? `envia de ${cfg.email.remetente}` : 'não configurado'}`);
     log('  0) Sair');
     const op = await perguntar('Escolha', '0');
     if (op === '0' || leitor?.closed) break;
     if (op === '1') { await editarPrestador(cfg); salvarConfig(cfg); log('  ✓ Salvo.'); }
     else if (op === '2') { await editarServico(cfg); salvarConfig(cfg); log('  ✓ Salvo.'); }
     else if (op === '3') await menuClientes(cfg);
+    else if (op === '5') {
+      const ag = require('../src/agenda');
+      const ligada = ag.situacao().ligada;
+      const acao = (await perguntar(`  l) ${ligada ? 'desligar' : 'ligar'} a rotina automática   d) ${cfg.automacao?.das === false ? 'ligar' : 'desligar'} o lembrete do DAS   0) voltar\nEscolha`, '0')).toLowerCase();
+      if (acao === 'l') { if (ligada) log(`  ✓ ${ag.desligar()}`); else await agendar(); }
+      else if (acao === 'd') {
+        cfg.automacao = { ...cfg.automacao, das: cfg.automacao?.das === false };
+        salvarConfig(cfg);
+        log(`  ✓ Lembrete do DAS ${cfg.automacao.das ? 'ligado' : 'desligado'}.`);
+      }
+    }
+    else if (op === '6') await configurarEmail(cfg);
     else if (op === '4' && cred.SUPORTADO) {
       const acao = (await perguntar('  g) guardar/trocar a senha   x) apagar a senha   0) voltar\nEscolha', '0')).toLowerCase();
       if (acao === 'g') await guardarSenha(cfg);
@@ -323,7 +373,7 @@ async function emitir(op) {
     log('   NÃO rode de novo para esta nota.');
     if (arquivos.pdf) log(`   PDF: ${arquivos.pdf}`);
     if (arquivos.xml) log(`   XML: ${arquivos.xml}`);
-    if (pendentes.length) {
+    if (pendentes.length && !op['sem-baixar']) {
       await ctx.close().catch(() => {}); // o navegador invisível não serve para o captcha
       await baixarComCaptcha(base, cfg, {
         chave, competenciaISO: nota.competenciaISO, apelido: nota.apelido,
@@ -394,12 +444,121 @@ function notaDoHistorico(cfg, chave) {
   return { chave: ch, apelido, valor, competenciaISO: iso(parseBR(competencia)) };
 }
 
+async function sincronizar(anoArg) {
+  const cfg = carregarConfig();
+  const hoje = hojeReal();
+  const ano = Number(anoArg) || hoje.getFullYear();
+  const de = new Date(ano, 0, 1);
+  const ate = ano === hoje.getFullYear() ? hoje : new Date(ano, 11, 31);
+  log(`Lendo a lista "Notas emitidas" do portal de ${formatarBR(de)} a ${formatarBR(ate)} (só leitura)...`);
+  const dados = await require('../src/rotina-real').sincronizarDoPortal(cfg, de, ate, log);
+  const doAno = dados.notas.filter(n => n.mes.startsWith(`${ano}-`));
+  const canceladas = doAno.filter(n => n.cancelada).length;
+  log(`\n✓ ${doAno.length} nota${doAno.length === 1 ? '' : 's'} de ${ano} no portal${canceladas ? ` (${canceladas} cancelada${canceladas > 1 ? 's' : ''}, que não contam)` : ''}.`);
+  log('Veja o resumo com: nfse-mei painel');
+}
+
+async function agendar(sub) {
+  const agenda = require('../src/agenda');
+  if (sub === 'remover') return log(agenda.desligar());
+  if (sub === 'status') {
+    const s = agenda.situacao();
+    return log(s.ligada ? `Rotina ligada.${s.proxima ? ` Próxima execução: ${s.proxima}` : ''}${s.detalhe ? `\n! ${s.detalhe}` : ''}` : 'Rotina desligada. Ligue com: nfse-mei agendar');
+  }
+  const cfg = carregarConfig();
+  const mensais = require('../src/rotina').clientesMensais(cfg);
+  const cred = require('../src/credencial');
+  log(agenda.ligar());
+  log('\nA rotina roda sozinha todo dia (9h e a cada 2h até 21h, e quando você liga o computador). Ela:');
+  if (mensais.length) {
+    for (const [a, t] of mensais) {
+      const v = t.mensal.valor ? `R$ ${formatarValor(parseValor(t.mensal.valor))}` : 'valor digitado na hora';
+      log(`  • nota de ${t.nome || a} (${v}) no último dia útil do mês: ${t.mensal.automatico && t.mensal.valor ? 'EMITE SOZINHA e avisa' : 'pergunta antes, com 1 clique'}`);
+    }
+  } else {
+    log('  • (nenhum cliente com "nota todo mês": ative em nfse-mei config → 3) Clientes → e) editar)');
+  }
+  if (cfg.automacao?.das !== false) log('  • lembra do DAS nos 5 dias antes do vencimento (dia 20)');
+  log('  • avisa quando o faturamento chegar perto do limite do MEI');
+  if (mensais.some(([, t]) => t.mensal.automatico) && !cred.temCredencial()) {
+    log('\n! Para emitir sozinha, a rotina precisa da senha do emissor guardada: nfse-mei senha');
+  }
+  log(`\nPara conferir sem emitir nada: nfse-mei rotina --teste\nO que ela fez fica em: ${agenda.LOG}\nPara desligar: nfse-mei agendar remover`);
+}
+
+async function configurarEmail(cfg) {
+  const email = require('../src/email');
+  const cred = require('../src/credencial');
+  const e = cfg.email || {};
+  log('E-MAIL: o nfse-mei manda a nota para o cliente usando o SEU e-mail (Gmail ou Outlook).');
+  log('A senha NÃO é a do seu e-mail: é uma "senha de app", criada só para isso.');
+  log('  Gmail: ative a verificação em 2 etapas e crie em https://myaccount.google.com/apppasswords\n');
+  const remetente = await perguntarValido('Seu e-mail (remetente)', e.remetente, r => (email.emailValido(r) ? null : 'e-mail inválido'));
+  const nome = await perguntar('Seu nome ou nome da empresa (vai na assinatura)', e.nome);
+  const copia = await simOuNao('Mandar uma cópia oculta para você mesmo, como comprovante?', e.copiaParaMim === false ? 'n' : 's');
+  cfg.email = { ...e, remetente: remetente.trim(), nome, copiaParaMim: copia };
+  salvarConfig(cfg);
+  if (cred.SUPORTADO && (!cred.temCredencial('email') || await simOuNao('Trocar a senha de app guardada?', 'n'))) {
+    log(process.platform === 'darwin'
+      ? 'Digite a senha de app (não aparece na tela) e repita para confirmar:'
+      : 'Abrindo a janela do Windows: no "Usuário" deixe seu e-mail e na senha cole a SENHA DE APP.');
+    cred.salvarCredencial(cfg.email.remetente, 'email');
+  }
+  if (cred.SUPORTADO && cred.temCredencial('email')) {
+    process.stdout.write('Conferindo o login no servidor de e-mail... ');
+    try {
+      await email.testarLogin(cfg, cred.lerCredencial('email').senha);
+      log('✓ funcionou.');
+    } catch (err) {
+      log(`✗ não entrou (${err.message.split('\n')[0]}). Confira o e-mail e a senha de app: nfse-mei email`);
+    }
+  }
+  const semEmail = Object.entries(cfg.tomadores).filter(([, t]) => !t.email);
+  if (semEmail.length && await simOuNao(`\nCadastrar agora o e-mail dos clientes (${semEmail.map(([a]) => a).join(', ')})?`, 's')) {
+    for (const [a, t] of semEmail) {
+      const r = await perguntarValido(`  E-mail de ${t.nome || a} (vários: separe por vírgula; vazio = não manda)`, '', v => (!v || email.emailsValidos(v) ? null : 'e-mail inválido'));
+      if (r) t.email = r;
+    }
+    salvarConfig(cfg);
+  }
+  log('\n✓ E-mail configurado. Teste mandando um exemplo para você mesmo: nfse-mei email teste');
+}
+
+async function comandoEmail(sub, arg) {
+  const cfg = carregarConfig();
+  const email = require('../src/email');
+  const cred = require('../src/credencial');
+  if (!sub) return configurarEmail(cfg);
+  if (!cfg.email?.remetente) throw new Error('E-mail ainda não configurado. Rode: nfse-mei email');
+  if (!cred.temCredencial('email')) throw new Error('Senha de app não guardada. Rode: nfse-mei email');
+  const senha = cred.lerCredencial('email').senha;
+  if (sub === 'teste') {
+    const exemplo = { email: cfg.email.remetente, nome: 'CLIENTE DE EXEMPLO LTDA', cnpj: '11222333000181' };
+    const r = await email.enviarNota({ ...cfg, email: { ...cfg.email, copiaParaMim: false } }, senha, {
+      tomador: exemplo, chave: '0'.repeat(50), numero: 'EXEMPLO', centavos: 123456, competencia: formatarBR(ultimoDiaUtil(hojeReal().getFullYear(), hojeReal().getMonth() + 1)),
+    });
+    return log(`✓ Exemplo enviado para ${r.para.join(', ')}. Veja como o cliente vai receber.`);
+  }
+  if (sub === 'enviar') {
+    const { todasAsNotas } = require('../src/historico');
+    const nota = todasAsNotas(cfg).find(n => n.numero === String(Number(arg)) || n.chave === soDigitos(arg));
+    if (!nota) throw new Error(`Não achei a nota "${arg || ''}". Use o número da nota (rode nfse-mei sincronizar se ela foi feita no portal).`);
+    const t = Object.values(cfg.tomadores).find(x => soDigitos(x.cnpj) === soDigitos(nota.cnpj));
+    if (!t?.email) throw new Error('Esse cliente não tem e-mail cadastrado: nfse-mei config → 3) Clientes → e) editar');
+    const [aaaa, mm] = nota.mes.split('-');
+    const r = await email.enviarNota(cfg, senha, { tomador: t, chave: nota.chave, numero: nota.numero, centavos: nota.centavos, competencia: formatarBR(ultimoDiaUtil(+aaaa, +mm)) });
+    return log(`✓ Nota nº ${nota.numero} enviada para ${r.para.join(', ')}.`);
+  }
+  throw new Error(`Uso: nfse-mei email [teste | enviar <número>]`);
+}
+
 async function main() {
   const { values: op, positionals } = parseArgs({
     allowPositionals: true,
     options: {
       tomador: { type: 'string' }, valor: { type: 'string' }, competencia: { type: 'string' },
       teste: { type: 'boolean' }, sim: { type: 'boolean' }, homologacao: { type: 'boolean' }, ver: { type: 'boolean' },
+      'sem-baixar': { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -438,6 +597,18 @@ async function main() {
     cred.salvarCredencial(cnpj);
     return log(`Senha guardada ${cred.ONDE}.`);
   }
+  if (cmd === 'painel') return log(require('../src/painel').textoPainel(carregarConfig()));
+  if (cmd === 'relatorio') {
+    const ano = Number(positionals[1]) || hojeReal().getFullYear() - 1;
+    return log(require('../src/painel').textoRelatorio(carregarConfig(), ano));
+  }
+  if (cmd === 'sincronizar') return sincronizar(positionals[1]);
+  if (cmd === 'rotina') {
+    await require('../src/rotina-real').executarRotina({ teste: op.teste, eco: true });
+    return;
+  }
+  if (cmd === 'agendar') return agendar(positionals[1]);
+  if (cmd === 'email') return comandoEmail(positionals[1], positionals[2]);
   if (cmd === 'ultimo-dia-util') {
     const [m, a] = (positionals[1] || '').split('/').map(Number);
     const hoje = new Date();

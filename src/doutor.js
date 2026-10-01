@@ -88,6 +88,32 @@ function checarSenha(cred) {
     : { ok: 'aviso', titulo: 'Senha do emissor', detalhe: 'não guardada, o login fica manual', dica: 'Rode: nfse-mei senha' };
 }
 
+// Rotina automática: ligada? aponta para esta instalação? tem o que precisa para emitir sozinha?
+function checarAutomacao(cfg, situacao, cred) {
+  const mensais = Object.values(cfg.tomadores || {}).filter(t => t.mensal?.ativo);
+  const automaticos = mensais.filter(t => t.mensal.automatico && t.mensal.valor);
+  if (!situacao.ligada) {
+    return mensais.length
+      ? { ok: 'aviso', titulo: 'Rotina automática', detalhe: `desligada, mas ${mensais.length} cliente${mensais.length > 1 ? 's têm' : ' tem'} nota todo mês`, dica: 'Rode: nfse-mei agendar' }
+      : { ok: 'aviso', titulo: 'Rotina automática', detalhe: 'desligada (sem lembrete de nota, DAS e limite)', dica: 'Opcional: nfse-mei agendar' };
+  }
+  if (situacao.detalhe) return { ok: false, titulo: 'Rotina automática', detalhe: situacao.detalhe, dica: 'Rode: nfse-mei agendar' };
+  if (automaticos.length && cred.SUPORTADO && !cred.temCredencial()) {
+    return { ok: false, titulo: 'Rotina automática', detalhe: 'emissão sozinha ligada, mas sem senha guardada', dica: 'Rode: nfse-mei senha' };
+  }
+  const partes = [automaticos.length && `${automaticos.length} automática${automaticos.length > 1 ? 's' : ''}`, mensais.length - automaticos.length && `${mensais.length - automaticos.length} com 1 clique`].filter(Boolean);
+  return { ok: true, titulo: `Rotina automática: ligada${partes.length ? ` (${partes.join(', ')})` : ''}${situacao.proxima ? ` · próxima ${situacao.proxima}` : ''}` };
+}
+
+function checarEmail(cfg, cred) {
+  const comEmail = Object.values(cfg.tomadores || {}).filter(t => t.email);
+  if (!cfg.email?.remetente) {
+    return comEmail.length ? { ok: 'aviso', titulo: 'E-mail', detalhe: 'clientes têm e-mail, mas o envio não está configurado', dica: 'Rode: nfse-mei email' } : null;
+  }
+  if (cred.SUPORTADO && !cred.temCredencial('email')) return { ok: false, titulo: 'E-mail', detalhe: 'senha de app não guardada', dica: 'Rode: nfse-mei email' };
+  return { ok: true, titulo: `E-mail: envia de ${cfg.email.remetente} para ${comEmail.length} cliente${comEmail.length === 1 ? '' : 's'}` };
+}
+
 async function checarPortal(base, buscar = fetch) {
   const url = `${base}/EmissorNacional/Login`;
   try {
@@ -109,7 +135,7 @@ function formatar(item) {
 }
 
 // Roda tudo e imprime conforme vai checando. Devolve true se não houve nenhum ✗.
-async function doutor({ log = console.log, abrirChrome = abrirChromeDeVerdade, buscar = fetch, cred = require('./credencial') } = {}) {
+async function doutor({ log = console.log, abrirChrome = abrirChromeDeVerdade, buscar = fetch, cred = require('./credencial'), agenda = () => require('./agenda').situacao() } = {}) {
   log('nfse-mei doutor: conferindo se está tudo pronto para emitir\n');
   const itens = [];
   const mostrar = item => { if (item) { itens.push(item); log(formatar(item)); } };
@@ -120,6 +146,10 @@ async function doutor({ log = console.log, abrirChrome = abrirChromeDeVerdade, b
   cadastro.forEach(mostrar);
   if (cfg) mostrar(checarPastaNotas(cfg.pastaNotas));
   mostrar(checarSenha(cred));
+  if (cfg) {
+    mostrar(checarAutomacao(cfg, agenda(), cred));
+    mostrar(checarEmail(cfg, cred));
+  }
   mostrar(await checarPortal(AMBIENTES[cfg?.ambiente || 'producao'], buscar));
   const erros = itens.filter(i => i.ok === false).length;
   const avisos = itens.filter(i => i.ok === 'aviso').length;
@@ -129,4 +159,4 @@ async function doutor({ log = console.log, abrirChrome = abrirChromeDeVerdade, b
   return erros === 0;
 }
 
-module.exports = { doutor, checarNode, checarSistema, checarChrome, checarCadastro, checarPastaNotas, checarSenha, checarPortal, formatar };
+module.exports = { doutor, checarNode, checarSistema, checarChrome, checarCadastro, checarPastaNotas, checarSenha, checarAutomacao, checarEmail, checarPortal, formatar };

@@ -3,7 +3,16 @@
 [![testes](https://github.com/Giandonn/nfse-mei/actions/workflows/testes.yml/badge.svg)](https://github.com/Giandonn/nfse-mei/actions/workflows/testes.yml)
 [![npm](.github/npm.svg)](https://www.npmjs.com/package/nfse-mei)
 
-**Emita a NFS-e do seu MEI com um comando.** O `nfse-mei` preenche por você o [Emissor Nacional da NFS-e](https://www.nfse.gov.br/EmissorNacional) (o portal do governo), confere tudo e só emite depois do seu OK.
+**A nota do seu MEI no piloto automático.** O `nfse-mei` preenche por você o [Emissor Nacional da NFS-e](https://www.nfse.gov.br/EmissorNacional) (o portal do governo), confere tudo e emite. Se você quiser, ele faz isso **sozinho** no último dia útil do mês, manda a nota por e-mail para o cliente, lembra do DAS e avisa antes de você estourar o limite do MEI.
+
+```text
+✅ Nota nº 12 emitida
+R$ 4.000,00 para ACME TECNOLOGIA LTDA · competência 30/10/2026
+No ano: R$ 38.000,00 de R$ 81.000,00 (47%)
+Enviei para financeiro@acme.com.br
+```
+
+Sem automação, ele também funciona do jeito clássico: você roda um comando e confirma.
 
 ```text
 $ nfse-mei emitir
@@ -47,7 +56,8 @@ Já tem Node.js 20+, Google Chrome e a [senha do Emissor Nacional](#1-crie-a-sen
 ```bash
 npm install -g nfse-mei     # 1. instala
 nfse-mei emitir --teste     # 2. cadastra seus dados (só na primeira vez) e testa sem emitir
-nfse-mei emitir             # 3. emite de verdade, todo mês
+nfse-mei emitir             # 3. emite de verdade
+nfse-mei agendar            # 4. (opcional) piloto automático: nota do mês, DAS e limite
 ```
 
 Falta alguma coisa? Veja os [requisitos](#requisitos) logo abaixo ou rode `nfse-mei doutor`, que diz o que falta.
@@ -94,6 +104,8 @@ O valor e a data não entram aqui: eles são perguntados a cada nota.
 - [Como funciona](#como-funciona)
 - [Instalação passo a passo](#instalação-passo-a-passo)
 - [Uso no dia a dia](#uso-no-dia-a-dia)
+- [Piloto automático](#piloto-automático)
+- [Seu MEI: painel, limite e declaração anual](#seu-mei-painel-limite-e-declaração-anual)
 - [De onde vem cada dado da nota](#de-onde-vem-cada-dado-da-nota)
 - [Configuração (config.json)](#configuração-configjson)
 - [Baixar o PDF e o XML](#baixar-o-pdf-e-o-xml)
@@ -243,6 +255,82 @@ nfse-mei ultimo-dia-util 12/2026         # só mostra a data
 > [!WARNING]
 > Depois de ver **"✅ NFS-e EMITIDA"**, não rode de novo para a mesma nota: sai uma segunda nota. Confira em `historico.csv`.
 
+## Piloto automático
+
+Para quem fatura todo mês para os mesmos clientes. Liga uma vez e o computador cuida do resto.
+
+### Ligar
+
+1. Para cada cliente fixo: `nfse-mei config` → **3) Clientes** → **e) editar** e responda:
+   - **Nota todo mês para este cliente?** `s`
+   - **Valor fixo por mês:** ex. `3500`. Deixe vazio se o valor muda; aí ele abre o nfse-mei para você digitar.
+   - **Emitir SOZINHO, sem perguntar?** `s` para 100% automático, `n` para confirmar com 1 clique.
+   - **E-mail do cliente:** para onde mandar a nota (opcional).
+2. Guarde a senha do emissor, se ainda não guardou: `nfse-mei senha`.
+3. Ligue a rotina:
+
+   ```bash
+   nfse-mei agendar
+   ```
+
+Ela roda escondida todo dia (9h e a cada 2h até 21h, e quando você liga o computador), sem precisar de administrador. No Windows é uma tarefa do **Agendador de Tarefas**; no macOS, um **LaunchAgent**.
+
+### O que acontece
+
+| Quando | O que a rotina faz |
+|---|---|
+| **Último dia útil do mês** | Cliente "automático": entra no portal, **confere se a nota do mês já existe** (inclusive feita à mão), emite, manda por e-mail e mostra um aviso ✅. Cliente "1 clique": abre uma janela **[Emitir agora] [Lembrar amanhã] [Pular este mês]** |
+| **Computador desligado no dia** | Faz isso quando você ligar, até o dia 10 do mês seguinte, com a competência do mês certo |
+| **5 dias antes do DAS (dia 20)** | Janela **[Abrir o PGMEI] [Já paguei] [Lembrar amanhã]**, uma vez por dia, até você marcar "Já paguei" |
+| **Faturamento perto do limite** | Avisa ao passar de 80%, ao passar do limite e se, no ritmo atual, você vai estourar no ano |
+
+### Por que dá para confiar
+
+- **Nunca emite duas vezes:** antes de emitir, lê a lista "Notas emitidas" do portal. Se já existe nota daquele cliente naquela competência (do nfse-mei ou feita à mão), não emite. Nota cancelada não conta.
+- **Não emite às cegas:** se não conseguir ler a lista do portal, não emite e tenta mais tarde.
+- **Limite do MEI:** uma nota que faria o faturamento do ano passar do limite **nunca sai sozinha**: vira pergunta, com o aviso.
+- **Portal fora do ar:** tenta de novo nas próximas rodadas. Depois de 3 falhas, para de tentar sozinha e passa a perguntar.
+- **Mesmas conferências do `emitir`:** competência, CNPJs e valor na tela de revisão. Se algo não bater, não emite.
+- **Teste sem risco:** `nfse-mei rotina --teste` faz tudo, inclusive preencher o portal, e para na revisão.
+
+### E-mail para o cliente
+
+```bash
+nfse-mei email          # configura (uma vez)
+nfse-mei email teste    # manda um exemplo para você mesmo
+```
+
+O e-mail sai do **seu** e-mail (Gmail ou Outlook), com uma **senha de app**: não é a senha normal do e-mail, é uma senha criada só para isso. No Gmail: ative a verificação em 2 etapas e crie em [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Ela fica no cofre do sistema, como a senha do emissor.
+
+O cliente recebe número, valor, competência e a **chave de acesso**, com o link da [Consulta Pública oficial](https://www.nfse.gov.br/consultapublica), onde ele vê e baixa o PDF. O PDF não vai anexado porque o portal exige captcha para baixá-lo, e o nfse-mei nunca gera um PDF por conta própria. Você recebe uma cópia oculta, como comprovante. Para reenviar uma nota: `nfse-mei email enviar 12`.
+
+### Acompanhar e desligar
+
+```bash
+nfse-mei agendar status     # está ligada? quando roda de novo?
+nfse-mei rotina             # roda agora, mostrando o que faz
+nfse-mei agendar remover    # desliga
+```
+
+Tudo o que a rotina faz fica em `rotina.log`, na pasta do config.
+
+## Seu MEI: painel, limite e declaração anual
+
+```text
+$ nfse-mei painel
+Seu MEI em 2026
+
+  Faturado:   R$ 34.000,00 de R$ 81.000,00  [█████████████░░░░░░░░░░░░░░░░░] 42%
+  Ainda cabe: R$ 47.000,00
+  Projeção:   R$ 45.333,33 no ano, no ritmo atual
+
+  Próximo DAS: vence 20/10/2026 (em 20 dias)
+```
+
+- `nfse-mei sincronizar`: lê a lista de notas do portal (só leitura), para o painel contar também as notas feitas à mão e descontar as canceladas. A rotina faz isso sozinha antes de emitir.
+- `nfse-mei relatorio 2026`: o número para a **declaração anual do MEI (DASN-SIMEI)**, que vence em 31/05 do ano seguinte, com o total por mês e por cliente e o link para declarar.
+- O limite padrão é R$ 81.000 por ano. No **primeiro ano** do MEI ele é proporcional (R$ 6.750 por mês de atividade): ajuste `limiteAnual` no `config.json`.
+
 ## De onde vem cada dado da nota
 
 | Dado na nota | De onde vem | Quando é escolhido |
@@ -327,34 +415,44 @@ Quando dá erro, o script salva um print da tela em `ultimo-erro.png`, na mesma 
   - **Windows:** `%APPDATA%\nfse-mei\credencial.xml`, criptografada com **DPAPI**.
   - **macOS:** no **Keychain** (app Acesso às Chaves), item `nfse-mei`.
 
-  Ela nunca aparece no terminal, na linha de comando nem em arquivo aberto.
+  Ela nunca aparece no terminal, na linha de comando nem em arquivo aberto. A **senha de app do e-mail** fica do mesmo jeito, num item separado (`credencial-email.xml` / `nfse-mei-email`).
 - A senha só é digitada na página de login do próprio `nfse.gov.br`. Se o portal redirecionar para outro endereço, o script para sem digitar.
 - O Chrome usa um **perfil próprio** (`perfil-chrome`, na pasta do config), separado do seu navegador. O gerenciador de senhas do Chrome fica **desligado** nesse perfil, e qualquer senha que ele tenha guardado é apagada a cada execução. Assim não existe uma segunda cópia da senha fora do cofre do sistema.
 - No macOS/Linux a pasta do config é criada só para o seu usuário (permissão `700`). Ela guarda a sessão do portal e o histórico de notas.
-- O script só conversa com `nfse.gov.br`. Não há telemetria nem servidor intermediário.
+- O script só conversa com `nfse.gov.br` e, se você configurar o e-mail, com o servidor do **seu** e-mail. Não há telemetria nem servidor intermediário.
+- A rotina automática roda como o seu usuário, sem administrador, e não abre nenhuma porta nem atalho que um site possa acionar.
 - `config.json`, PDFs e XMLs estão no `.gitignore`. **Não commite seus dados.**
 
 ## Limitações
 
 - **Só o caso mais comum do MEI:** tomador com CNPJ no Brasil, sem retenção, sem dedução, sem intermediário e sem IBS/CBS.
 - **Depende do layout do portal** (mapeado na versão 1.6.0.0). Se o governo mudar a tela, os seletores em `src/portal.js` precisam de ajuste. Abra uma issue.
-- **Download com captcha:** manual, veja acima.
+- **Download com captcha:** manual, veja acima. Por isso o e-mail ao cliente leva a chave e o link da consulta oficial, não o PDF.
+- **Piloto automático precisa do computador ligado** e com você logado em algum momento entre o último dia útil e o dia 10. No Linux, agende com o `cron` (o `nfse-mei agendar` mostra a linha).
 - **Guardar a senha** funciona no Windows e no macOS. No Linux o resto funciona, mas o login fica manual (rode com `--ver` e entre na janela).
 - **Futuro:** emitir pela [API oficial da NFS-e](https://www.gov.br/nfse) com certificado digital A1, sem navegador e sem captcha.
 
 ## Contribuindo
 
 ```bash
-npm test                         # testes de datas, valores, cadastro, doutor, senha e downloads
+npm test                         # testes (rotina, e-mail com servidor SMTP local, agenda, painel...)
 nfse-mei emitir --teste --ver    # roda o fluxo mostrando o Chrome, sem emitir
+NFSE_MEI_HOJE=2026-10-30 nfse-mei rotina --teste   # simula a rotina num dia qualquer, sem emitir
 ```
 
 A cada push, o GitHub Actions roda os testes em **Windows, macOS e Linux** (Node 20 e 22), inclusive guardando e lendo uma senha de teste no **Keychain real** do macOS, e instala o pacote como um usuário faria.
 
 Estrutura:
 
-- `bin/nfse-mei.js`: CLI (init, config, senha, emitir, baixar)
+- `bin/nfse-mei.js`: CLI (init, config, senha, emitir, baixar, agendar, rotina, email, painel...)
 - `src/portal.js`: toda a automação do portal (seletores, retentativas, revisão)
+- `src/rotina.js`: as regras do piloto automático (o que fazer em cada dia), testadas com o mundo simulado
+- `src/rotina-real.js`: liga a rotina ao portal, à emissão, ao e-mail e às notificações
+- `src/agenda.js`: Agendador de Tarefas (Windows) e LaunchAgent (macOS)
+- `src/notificar.js`: avisos e janelas com botões, nativos de cada sistema
+- `src/historico.js`: notas emitidas (CSV) + lista do portal; nunca emitir duas vezes
+- `src/painel.js`: limite do MEI, projeção, DAS e relatório da DASN-SIMEI
+- `src/email.js`: e-mail da nota para o cliente
 - `src/datas.js`: último dia útil e feriados nacionais
 - `src/valores.js`: dinheiro e CNPJ
 - `src/credencial.js`: senha no cofre do sistema (DPAPI no Windows, Keychain no macOS)

@@ -284,9 +284,7 @@ async function emitirEBaixar(page, base, cfg, nota, log) {
 
   const { destinoDaNota } = require('./downloads');
   // Registra antes de baixar: se o download falhar, a nota continua existindo.
-  const hist = path.join(cfg.pastaNotas, 'historico.csv');
-  if (!fs.existsSync(hist)) fs.writeFileSync(hist, 'emitida_em;competencia;tomador;cnpj;valor;chave\n');
-  fs.appendFileSync(hist, `${new Date().toISOString()};${nota.competencia};${nota.apelido};${soDigitos(nota.tomador.cnpj)};${formatarValor(nota.centavos)};${chave}\n`);
+  require('./historico').registrar(cfg, nota, chave);
 
   const arquivos = {};
   const pendentes = [];

@@ -1,6 +1,6 @@
 {
   "name": "nfse-mei",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Emite a NFS-e do MEI no Emissor Nacional (nfse.gov.br) pelo terminal: preenche, confere e só emite com seu OK.",
   "keywords": [
     "nfse",
@@ -36,6 +36,10 @@
     "test": "node --test"
   },
   "dependencies": {
+    "nodemailer": "^10.0.13",
     "playwright-core": "^1.63.0"
+  },
+  "devDependencies": {
+    "smtp-server": "^3.19.16"
   }
 }

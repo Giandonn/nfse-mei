@@ -34,6 +34,27 @@ function ultimoDiaUtil(ano, mes /* 1-12 */) {
   return d;
 }
 
+function proximoDiaUtil(d) {
+  const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  while (!ehDiaUtil(r)) r.setDate(r.getDate() + 1);
+  return r;
+}
+
+// DAS do MEI: vence dia 20; se não for dia útil, passa para o próximo dia útil.
+function vencimentoDas(ano, mes /* 1-12 */) {
+  return proximoDiaUtil(new Date(ano, mes - 1, 20));
+}
+
+// "Hoje" sem hora. NFSE_MEI_HOJE=AAAA-MM-DD simula outra data (testes e conferência da rotina).
+function hoje() {
+  const simulado = /^(\d{4})-(\d{2})-(\d{2})$/.exec(process.env.NFSE_MEI_HOJE || '');
+  if (simulado) return new Date(+simulado[1], +simulado[2] - 1, +simulado[3]);
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+const mesmoDia = (a, b) => iso(a) === iso(b);
+
 function formatarBR(d) {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
@@ -46,4 +67,4 @@ function parseBR(s) {
   return d;
 }
 
-module.exports = { pascoa, ehDiaUtil, ultimoDiaUtil, formatarBR, parseBR, iso };
+module.exports = { pascoa, ehDiaUtil, ultimoDiaUtil, proximoDiaUtil, vencimentoDas, hoje, mesmoDia, formatarBR, parseBR, iso };

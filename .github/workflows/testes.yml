@@ -32,6 +32,12 @@ jobs:
           security default-keychain -d user -s nfse-mei-ci.keychain
           echo "NFSE_MEI_TESTAR_KEYCHAIN=1" >> "$GITHUB_ENV"
 
+      # Agendador de Tarefas de verdade (tarefa e pasta de teste, removidas no fim).
+      - name: Liga o teste do Agendador (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "NFSE_MEI_TESTAR_AGENDA=1" >> "$GITHUB_ENV"
+
       - run: npm test
 
   pacote:

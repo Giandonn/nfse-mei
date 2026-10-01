@@ -31,7 +31,9 @@ test('init de primeira vez e menu de clientes', () => {
   const init = rodar(pasta, ['init'], [
     '11222333000182', '11222333000181', '', // CNPJ errado, depois certo; pasta padrão
     'São Paulo/SP', '1.1.1', '01.01.01', '115022000', 'Análise e desenvolvimento de sistemas',
-    'acme', '11222333000181', 'ACME TECNOLOGIA LTDA', 'n',
+    'acme', '11222333000181', 'ACME TECNOLOGIA LTDA', 'nao-e-email', 'financeiro@acme.com.br', // e-mail inválido, depois válido
+    's', '3.500,00', 's', // nota todo mês, R$ 3.500, automática
+    'n',
   ]);
   assert.strictEqual(init.status, 0, init.stderr);
   assert.match(init.stdout, /CNPJ inválido/);
@@ -41,13 +43,17 @@ test('init de primeira vez e menu de clientes', () => {
   assert.strictEqual(cfg.servico.codigoTributacaoNacional, '01.01.01');
   assert.deepStrictEqual(Object.keys(cfg.tomadores), ['acme']);
   assert.strictEqual(cfg.tomadorPadrao, 'acme');
+  assert.match(init.stdout, /e-mail inválido/);
+  assert.strictEqual(cfg.tomadores.acme.email, 'financeiro@acme.com.br');
+  assert.deepStrictEqual(cfg.tomadores.acme.mensal, { ativo: true, valor: '3.500,00', automatico: true });
 
-  // Menu: adiciona globex, vira padrão, renomeia acme -> acme2, remove acme2.
+  // Menu: adiciona globex (sem e-mail, sem nota mensal), vira padrão, renomeia acme -> acme2
+  // desligando a nota mensal, remove acme2.
   const menu = rodar(pasta, ['config'], [
     '3',
-    'a', 'acme', 'globex', '11444777000161', 'GLOBEX LTDA', // "acme" já existe: pede de novo
+    'a', 'acme', 'globex', '11444777000161', 'GLOBEX LTDA', '', 'n', // "acme" já existe: pede de novo
     'p', 'globex',
-    'e', '1', 'acme2', '', '',
+    'e', '1', 'acme2', '', '', '', 'n',
     'r', 'acme2', 's',
     '0', '0',
   ]);
