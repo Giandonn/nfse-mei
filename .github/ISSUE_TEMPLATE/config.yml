@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Dúvida sobre qual código ou NBS usar na nota
+    url: https://www.gov.br/nfse
+    about: Isso é com o seu contador ou com a documentação oficial da NFS-e; o nfse-mei só preenche o que você cadastrar.

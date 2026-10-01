@@ -15,6 +15,7 @@ Uso:
   nfse-mei senha [CNPJ]             guarda a senha do emissor (login automático)
   nfse-mei senha apagar             apaga a senha guardada
   nfse-mei emitir [opções]          pergunta cliente/valor/competência, preenche e emite
+  nfse-mei doutor                   confere se está tudo pronto (Node, Chrome, cadastro, senha, portal)
   nfse-mei baixar [chave]           ajuda a baixar o PDF/XML (padrão: a última nota) e guarda na pasta do mês
   nfse-mei ultimo-dia-util [MM/AAAA]
 
@@ -407,6 +408,10 @@ async function main() {
   if (cmd === 'init') return init();
   if (cmd === 'config') return require('fs').existsSync(ARQUIVO_CONFIG) ? menuConfig(carregarConfig()) : init();
   if (cmd === 'emitir') return emitir(op);
+  if (cmd === 'doutor') {
+    if (!(await require('../src/doutor').doutor())) process.exitCode = 1;
+    return;
+  }
   if (cmd === 'baixar') {
     const cfg = carregarConfig();
     const base = AMBIENTES[op.homologacao ? 'producaorestrita' : cfg.ambiente];

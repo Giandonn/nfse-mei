@@ -1,31 +1,18 @@
 {
   "name": "nfse-mei",
   "version": "0.1.0",
-  "directories": {
-    "test": "test"
-  },
-  "scripts": {
-    "test": "node --test test/"
-  },
+  "description": "Emite a NFS-e do MEI no Emissor Nacional (nfse.gov.br) pelo terminal: preenche, confere e só emite com seu OK.",
   "keywords": [
     "nfse",
+    "nfs-e",
     "mei",
     "nota-fiscal",
     "emissor-nacional",
+    "cli",
     "playwright"
   ],
-  "author": "",
+  "author": "Lucas Raineri (https://github.com/Giandonn)",
   "license": "MIT",
-  "description": "Emite a NFS-e do MEI no Emissor Nacional pedindo só o que muda (valor, competência, tomador).",
-  "dependencies": {
-    "playwright-core": "^1.63.0"
-  },
-  "bin": {
-    "nfse-mei": "bin/nfse-mei.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Giandonn/nfse-mei.git"
@@ -33,5 +20,22 @@
   "homepage": "https://github.com/Giandonn/nfse-mei#readme",
   "bugs": {
     "url": "https://github.com/Giandonn/nfse-mei/issues"
+  },
+  "bin": {
+    "nfse-mei": "bin/nfse-mei.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "config.example.json"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright-core": "^1.63.0"
   }
 }

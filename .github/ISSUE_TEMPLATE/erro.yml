@@ -1,0 +1,42 @@
+name: Deu erro / o portal mudou
+description: O nfse-mei parou no meio, deu mensagem de erro ou o portal parece diferente.
+labels: [erro]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por avisar! O ponto mais frágil do projeto é o governo mudar a tela do portal, então seu relato ajuda todo mundo.
+
+        > [!WARNING]
+        > **Não cole senha, nem dados de clientes.** Antes de anexar print ou texto, esconda seu CNPJ, o CNPJ e o nome dos clientes e a chave da nota (pode tampar com um retângulo ou trocar por `XX`).
+  - type: textarea
+    id: doutor
+    attributes:
+      label: Saída do `nfse-mei doutor`
+      description: Rode `nfse-mei doutor` e cole aqui (troque o seu CNPJ por XX).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: comando
+    attributes:
+      label: O que você rodou e a mensagem de erro
+      description: O comando (ex. `nfse-mei emitir --teste`) e o que apareceu no terminal.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: print
+    attributes:
+      label: Print da tela (opcional, mas ajuda muito)
+      description: |
+        Quando dá erro, o nfse-mei salva `ultimo-erro.png` na pasta do config
+        (Windows: `%APPDATA%\nfse-mei`, macOS: `~/.config/nfse-mei`). **Tampe seus dados** antes de anexar.
+  - type: checkboxes
+    id: confere
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Tentei de novo mais tarde (o portal cai bastante, principalmente no fim do mês).
+        - label: Escondi meu CNPJ, os dados dos clientes e não colei nenhuma senha.
+          required: true

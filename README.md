@@ -1,5 +1,8 @@
 # nfse-mei
 
+[![testes](https://github.com/Giandonn/nfse-mei/actions/workflows/testes.yml/badge.svg)](https://github.com/Giandonn/nfse-mei/actions/workflows/testes.yml)
+[![npm](https://img.shields.io/npm/v/nfse-mei)](https://www.npmjs.com/package/nfse-mei)
+
 **Emita a NFS-e do seu MEI com um comando.** O `nfse-mei` preenche por você o [Emissor Nacional da NFS-e](https://www.nfse.gov.br/EmissorNacional) (o portal do governo), confere tudo e só emite depois do seu OK.
 
 ```text
@@ -37,6 +40,18 @@ A cada nota você informa só **cliente, valor e data**, e o script sugere a dat
 > [!IMPORTANT]
 > A nota é emitida **pelo portal oficial**, do mesmo jeito que você faria na mão. O script **não gera PDF por conta própria**: um DANFSe só vale se a NFS-e existir no Sistema Nacional.
 
+## Começo rápido
+
+Já tem Node.js 20+, Google Chrome e a [senha do Emissor Nacional](#1-crie-a-senha-do-emissor-nacional-uma-vez-só)? Então são 3 comandos:
+
+```bash
+npm install -g nfse-mei     # 1. instala
+nfse-mei emitir --teste     # 2. cadastra seus dados (só na primeira vez) e testa sem emitir
+nfse-mei emitir             # 3. emite de verdade, todo mês
+```
+
+Falta alguma coisa? Veja os [requisitos](#requisitos) logo abaixo ou rode `nfse-mei doutor`, que diz o que falta.
+
 ---
 
 ## Requisitos
@@ -69,7 +84,6 @@ O valor e a data não entram aqui: eles são perguntados a cada nota.
 
 - [ ] **Windows 10/11 ou macOS**. A senha fica guardada no cofre do sistema: DPAPI no Windows, **Keychain** no macOS. Linux: veja [Limitações](#limitações).
 - [ ] [**Node.js 20+**](https://nodejs.org). Confira com `node -v`.
-- [ ] [**Git**](https://git-scm.com) para clonar o projeto. Confira com `git --version`.
 - [ ] [**Google Chrome**](https://www.google.com/chrome/) instalado
 
 ---
@@ -119,13 +133,30 @@ O gov.br tem captcha e 2FA, que bloqueiam qualquer automação (de propósito). 
 ### 2. Instale o nfse-mei
 
 ```bash
+npm install -g nfse-mei
+```
+
+Pronto: o comando `nfse-mei` funciona em qualquer terminal. Para conferir se a máquina está pronta (Node, Chrome, portal no ar), rode:
+
+```bash
+nfse-mei doutor
+```
+
+> **macOS:** se o `npm install -g` der erro de permissão (`EACCES`), rode `sudo npm install -g nfse-mei`. Isso acontece quando o Node foi instalado pelo instalador do site; com Homebrew (`brew install node`) não precisa.
+
+Para atualizar depois: `npm install -g nfse-mei@latest`.
+
+<details>
+<summary>Instalar a partir do código (para quem quer mexer no projeto)</summary>
+
+```bash
 git clone https://github.com/Giandonn/nfse-mei.git
 cd nfse-mei
 npm install
 npm link          # deixa o comando `nfse-mei` disponível em qualquer terminal
 ```
 
-> **macOS:** se o `npm link` der erro de permissão (`EACCES`), rode `sudo npm link`. Isso acontece quando o Node foi instalado pelo instalador do site; com Homebrew (`brew install node`) não precisa.
+</details>
 
 ### 3. Configure seus dados
 
@@ -195,6 +226,7 @@ nfse-mei emitir --competencia 15/10/2026 # outra data de competência
 nfse-mei emitir --ver                    # mostra o Chrome na tela (para acompanhar)
 nfse-mei baixar                          # ajuda a baixar o PDF/XML da última nota e guarda na pasta do mês
 nfse-mei config                          # muda seus dados, o serviço, os clientes ou a senha
+nfse-mei doutor                          # confere se está tudo pronto e diz o que falta
 nfse-mei ultimo-dia-util 12/2026         # só mostra a data
 ```
 
@@ -275,6 +307,8 @@ O portal exige um **captcha ("Sou humano")** para baixar o DANFSe (PDF) e o XML.
 
 ## Problemas comuns
 
+Primeiro passo para qualquer problema: rode `nfse-mei doutor`. Ele confere Node, Chrome, cadastro, senha e se o portal está no ar, e diz o que fazer em cada item com ✗. Se for abrir uma issue, cole a saída dele.
+
 | Mensagem | O que é | O que fazer |
 |---|---|---|
 | `portal fora do ar (HTTP 503), tentando de novo...` | O servidor do governo está sobrecarregado (comum no fim do mês) | Nada, o script tenta de novo. Se desistir, tente mais tarde |
@@ -311,9 +345,11 @@ Quando dá erro, o script salva um print da tela em `ultimo-erro.png`, na mesma 
 ## Contribuindo
 
 ```bash
-npm test                         # testes de datas, valores, cadastro e da vigia de downloads
+npm test                         # testes de datas, valores, cadastro, doutor, senha e downloads
 nfse-mei emitir --teste --ver    # roda o fluxo mostrando o Chrome, sem emitir
 ```
+
+A cada push, o GitHub Actions roda os testes em **Windows, macOS e Linux** (Node 20 e 22), inclusive guardando e lendo uma senha de teste no **Keychain real** do macOS, e instala o pacote como um usuário faria.
 
 Estrutura:
 
@@ -323,6 +359,7 @@ Estrutura:
 - `src/valores.js`: dinheiro e CNPJ
 - `src/credencial.js`: senha no cofre do sistema (DPAPI no Windows, Keychain no macOS)
 - `src/downloads.js`: vigia a pasta Downloads e guarda os arquivos na pasta do mês
+- `src/doutor.js`: checagens do `nfse-mei doutor`
 - `src/config.js`: onde fica cada arquivo
 
 PRs são bem-vindos, principalmente para outros cenários de nota (tomador pessoa física, exterior, retenções) e para a emissão via API.

@@ -1,0 +1,15 @@
+name: Sugestão
+description: Uma ideia ou um caso de nota que o nfse-mei ainda não cobre.
+labels: [sugestão]
+body:
+  - type: textarea
+    id: ideia
+    attributes:
+      label: O que você queria que o nfse-mei fizesse?
+      description: Ex. emitir para pessoa física, nota com retenção, outro sistema operacional...
+    validations:
+      required: true
+  - type: textarea
+    id: hoje
+    attributes:
+      label: Como você faz isso hoje?

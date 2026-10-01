@@ -1,0 +1,68 @@
+name: testes
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  testes:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+
+      # Keychain temporário como padrão: o teste do Keychain real nunca encosta no login.keychain.
+      - name: Keychain de teste (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          security create-keychain -p ci nfse-mei-ci.keychain
+          security set-keychain-settings nfse-mei-ci.keychain
+          security unlock-keychain -p ci nfse-mei-ci.keychain
+          security list-keychains -d user -s nfse-mei-ci.keychain
+          security default-keychain -d user -s nfse-mei-ci.keychain
+          echo "NFSE_MEI_TESTAR_KEYCHAIN=1" >> "$GITHUB_ENV"
+
+      - run: npm test
+
+  pacote:
+    name: instalar pelo pacote (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Empacotar e instalar como um usuário faria
+        shell: bash
+        run: |
+          npm pack
+          npm install -g ./nfse-mei-*.tgz
+      - name: O comando funciona fora da pasta do projeto
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        env:
+          NFSE_MEI_CONFIG: ${{ runner.temp }}/nfse-mei/config.json
+        run: |
+          nfse-mei --help | grep -q "nfse-mei doutor"
+          set +e
+          nfse-mei doutor > doutor.txt
+          codigo=$?
+          set -e
+          cat doutor.txt
+          test "$codigo" = 1
+          grep -q "Cadastro: ainda não feito" doutor.txt
+          grep -q "Google Chrome" doutor.txt
