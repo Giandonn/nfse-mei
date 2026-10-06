@@ -28,6 +28,9 @@ test('valores', () => {
   assert.strictEqual(parseValor('R$ 1.234,5'), 123450);
   assert.strictEqual(parseValor(1200), 120000);
   assert.strictEqual(parseValor('1200.75'), 120075);
+  assert.strictEqual(parseValor('3.800'), 380000);
+  assert.strictEqual(parseValor('1.250.000'), 125000000);
+  assert.strictEqual(parseValor('3.80'), 380);
   assert.throws(() => parseValor('abc'));
   assert.strictEqual(formatarValor(120000), '1.200,00');
   assert.strictEqual(formatarValor(123456789), '1.234.567,89');

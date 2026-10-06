@@ -32,7 +32,7 @@ test('init de primeira vez e menu de clientes', () => {
     '11222333000182', '11222333000181', '', // CNPJ errado, depois certo; pasta padrão
     'São Paulo/SP', '1.1.1', '01.01.01', '115022000', 'Análise e desenvolvimento de sistemas',
     'acme', '11222333000181', 'ACME TECNOLOGIA LTDA', 'nao-e-email', 'financeiro@acme.com.br', // e-mail inválido, depois válido
-    's', '3.500,00', 's', // nota todo mês, R$ 3.500, automática
+    's', '3.500,00', '32', '5', 's', // nota todo mês, R$ 3.500, dia 32 (inválido) e depois 5, automática
     'n',
   ]);
   assert.strictEqual(init.status, 0, init.stderr);
@@ -45,7 +45,8 @@ test('init de primeira vez e menu de clientes', () => {
   assert.strictEqual(cfg.tomadorPadrao, 'acme');
   assert.match(init.stdout, /e-mail inválido/);
   assert.strictEqual(cfg.tomadores.acme.email, 'financeiro@acme.com.br');
-  assert.deepStrictEqual(cfg.tomadores.acme.mensal, { ativo: true, valor: '3.500,00', automatico: true });
+  assert.match(init.stdout, /escolha um dia de 1 a 31/);
+  assert.deepStrictEqual(cfg.tomadores.acme.mensal, { ativo: true, valor: '3.500,00', automatico: true, dia: 5 });
 
   // Menu: adiciona globex (sem e-mail, sem nota mensal), vira padrão, renomeia acme -> acme2
   // desligando a nota mensal, remove acme2.

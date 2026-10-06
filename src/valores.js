@@ -3,8 +3,9 @@
 function parseValor(v) {
   if (typeof v === 'number') return Math.round(v * 100);
   const s = String(v).trim().replace(/^R\$\s*/, '');
-  // "1.234,56" / "1234,5" (BR) ou "1234.56" (ponto decimal)
-  const normal = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s;
+  // "1.234,56" / "1234,5" / "3.800" (BR, ponto de milhar) ou "1234.56" (ponto decimal)
+  const milhar = /^\d{1,3}(\.\d{3})+$/.test(s);
+  const normal = s.includes(',') || milhar ? s.replace(/\./g, '').replace(',', '.') : s;
   const n = Number(normal);
   if (!Number.isFinite(n) || n <= 0) throw new Error(`Valor inválido: "${v}"`);
   return Math.round(n * 100);

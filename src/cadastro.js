@@ -5,6 +5,13 @@ const { emailValido, emailsValidos } = require('./email');
 
 const texto = v => String(v ?? '').trim();
 
+// Dia da nota mensal: 1 a 31, ou vazio para o último dia útil. Devolve o número, 0 (vazio) ou null (inválido).
+function diaDaNotaValido(v) {
+  const s = texto(v);
+  if (!s) return 0;
+  return /^\d{1,2}$/.test(s) && Number(s) >= 1 && Number(s) <= 31 ? Number(s) : null;
+}
+
 function validarPrestador(d) {
   const erros = {};
   if (!cnpjValido(d.prestadorCnpj)) erros.prestadorCnpj = 'CNPJ inválido (confira os 14 números)';
@@ -32,6 +39,7 @@ function validarCliente(cfg, apelidoAtual, c) {
     try { if (parseValor(c.mensal.valor) <= 0) throw new Error(); } catch { erros.valor = 'valor inválido (ex: 3500 ou 3.500,00)'; }
   }
   if (c.mensal?.automatico && !texto(c.mensal?.valor)) erros.valor = 'para emitir sozinho, informe o valor fixo';
+  if (c.mensal?.ativo && texto(c.mensal.dia) && diaDaNotaValido(c.mensal.dia) === null) erros.dia = 'escolha um dia de 1 a 31 (ou o último dia útil)';
   return erros;
 }
 
@@ -69,6 +77,8 @@ function aplicarCliente(cfg, apelidoAtual, c) {
   if (c.mensal?.ativo) {
     const valor = texto(c.mensal.valor);
     novo.mensal = { ativo: true, valor: valor ? formatarValor(parseValor(valor)) : '', automatico: Boolean(c.mensal.automatico && valor) };
+    const dia = diaDaNotaValido(c.mensal.dia);
+    if (dia) novo.mensal.dia = dia;
   }
   if (apelidoAtual && apelidoAtual !== apelido) {
     delete cfg.tomadores[apelidoAtual];
@@ -105,4 +115,4 @@ function cadastroInicial(d) {
   return { ok: true, cfg };
 }
 
-module.exports = { validarPrestador, validarServico, validarCliente, aplicarPrestador, aplicarServico, aplicarCliente, removerCliente, aplicarEmail, cadastroInicial };
+module.exports = { diaDaNotaValido, validarPrestador, validarServico, validarCliente, aplicarPrestador, aplicarServico, aplicarCliente, removerCliente, aplicarEmail, cadastroInicial };

@@ -40,6 +40,13 @@ function proximoDiaUtil(d) {
   return r;
 }
 
+// Dia da nota mensal de um cliente: o dia escolhido (num mês mais curto, o último dia dele) ou, sem
+// dia escolhido, o último dia útil.
+function diaDaNota(ano, mes /* 1-12 */, dia) {
+  if (!dia) return ultimoDiaUtil(ano, mes);
+  return new Date(ano, mes - 1, Math.min(Number(dia), new Date(ano, mes, 0).getDate()));
+}
+
 // DAS do MEI: vence dia 20; se não for dia útil, passa para o próximo dia útil.
 function vencimentoDas(ano, mes /* 1-12 */) {
   return proximoDiaUtil(new Date(ano, mes - 1, 20));
@@ -67,4 +74,4 @@ function parseBR(s) {
   return d;
 }
 
-module.exports = { pascoa, ehDiaUtil, ultimoDiaUtil, proximoDiaUtil, vencimentoDas, hoje, mesmoDia, formatarBR, parseBR, iso };
+module.exports = { pascoa, ehDiaUtil, ultimoDiaUtil, proximoDiaUtil, diaDaNota, vencimentoDas, hoje, mesmoDia, formatarBR, parseBR, iso };

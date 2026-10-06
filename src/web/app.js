@@ -96,8 +96,8 @@ function telaInicio() {
       ${proximas.length ? `<ul class="lista">${proximas.map(p => `
         <li><div>
           <div class="titulo">${esc(p.nome)}</div>
-          <div class="detalhe">${p.feita ? `Nota nº ${esc(p.feita)} já emitida este mês` : `${esc(p.data)} · ${p.valor ? `R$ ${esc(p.valor)}` : 'valor na hora'}`}</div>
-          <div class="chips">${p.feita ? '<span class="chip marca">feita ✓</span>' : p.automatico ? '<span class="chip marca">sai sozinha</span>' : '<span class="chip">1 clique</span>'}${p.email ? '<span class="chip">e-mail</span>' : ''}</div>
+          <div class="detalhe">${p.feita ? `Nota nº ${esc(p.feita)} já emitida este mês` : `${esc(p.data)}${p.competencia !== p.data ? ` (competência ${esc(p.competencia)})` : ''} · ${p.valor ? `R$ ${esc(p.valor)}` : 'valor na hora'}`}</div>
+          <div class="chips">${p.feita ? '<span class="chip marca">feita ✓</span>' : p.automatico ? '<span class="chip marca">sai sozinha</span>' : '<span class="chip">confirma o valor</span>'}${p.email ? '<span class="chip">e-mail</span>' : ''}</div>
         </div></li>`).join('')}</ul>
         ${estado.agenda.ligada ? '' : '<div class="faixa alerta">O piloto automático está desligado: nada disso acontece sozinho. <button class="botao" data-acao="agenda" data-ligar="1">Ligar</button></div>'}`
       : `<p class="detalhe">Nenhum cliente com nota todo mês.</p><button class="botao" data-aba="clientes">Configurar em Clientes</button>`}
@@ -136,8 +136,8 @@ function telaClientes() {
           <div class="detalhe" style="color:var(--suave)">${cnpjFmt(t.cnpj)} · apelido <code>${esc(a)}</code></div>
           <div class="chips">
             ${a === estado.cfg.tomadorPadrao ? '<span class="chip">padrão</span>' : ''}
-            ${t.mensal?.ativo ? `<span class="chip marca">todo mês${t.mensal.valor ? ` · R$ ${esc(t.mensal.valor)}` : ''}</span>` : ''}
-            ${t.mensal?.automatico ? '<span class="chip marca">sai sozinha</span>' : t.mensal?.ativo ? '<span class="chip">1 clique</span>' : ''}
+            ${t.mensal?.ativo ? `<span class="chip marca">todo mês${t.mensal.dia ? ` · dia ${t.mensal.dia}` : ''}${t.mensal.valor ? ` · R$ ${esc(t.mensal.valor)}` : ''}</span>` : ''}
+            ${t.mensal?.automatico ? '<span class="chip marca">sai sozinha</span>' : t.mensal?.ativo ? '<span class="chip">confirma o valor</span>' : ''}
             ${t.email ? `<span class="chip">e-mail: ${esc(t.email)}</span>` : '<span class="chip">sem e-mail</span>'}
           </div>
         </div>
@@ -174,9 +174,15 @@ function formCliente(apelido) {
       ${campo('email', 'E-mail para receber a nota', t.email, { largo: true, ajuda: '(vários: separe por vírgula; vazio = não manda)', tipo: 'text' })}
     </div>
     <div style="margin-top:16px">
-      ${interruptor('mensalAtivo', 'Nota todo mês', 'No último dia útil do mês, o piloto automático cuida da nota deste cliente.', m.ativo)}
-      <div class="campos" style="margin:4px 0 8px">${campo('valor', 'Valor fixo por mês (R$)', m.valor, { ajuda: '(vazio = você digita a cada mês)', placeholder: '3.500,00' })}</div>
-      ${interruptor('automatico', 'Emitir sozinho, sem perguntar', 'A nota sai sozinha e você recebe um aviso depois. Desligado: aparece uma janela pedindo 1 clique.', m.automatico)}
+      ${interruptor('mensalAtivo', 'Nota todo mês', 'No dia da nota, o piloto automático cuida da nota deste cliente.', m.ativo)}
+      <div class="campos" style="margin:4px 0 8px">
+        ${campo('valor', 'Valor fixo por mês (R$)', m.valor, { ajuda: '(vazio = você digita a cada mês)', placeholder: '3.500,00' })}
+        <label class="campo">Dia da nota <span class="ajuda">(a janela aparece nesse dia)</span><select name="dia">
+          <option value="" ${m.dia ? '' : 'selected'}>Último dia útil · nota do próprio mês</option>
+          ${Array.from({ length: 31 }, (_, i) => i + 1).map(d => `<option value="${d}" ${m.dia === d ? 'selected' : ''}>Dia ${d} · nota do mês anterior</option>`).join('')}
+        </select><span class="erro-campo" data-erro="dia"></span></label>
+      </div>
+      ${interruptor('automatico', 'Emitir sozinho, sem perguntar', 'A nota sai sozinha e você recebe um aviso depois. Desligado: aparece uma janela com o valor, para você conferir ou mudar antes de emitir.', m.automatico)}
     </div>
     <span class="erro-campo" data-erro="geral"></span>
     <div class="acoes" style="justify-content:space-between">
@@ -470,6 +476,7 @@ function ajustarFormCliente(form) {
   if (!form || form.dataset.form !== 'cliente') return;
   const ativo = form.elements.mensalAtivo.checked;
   form.elements.valor.disabled = !ativo;
+  form.elements.dia.disabled = !ativo;
   form.elements.automatico.disabled = !ativo;
   if (!ativo) form.elements.automatico.checked = false;
 }
@@ -486,7 +493,7 @@ document.addEventListener('submit', async ev => {
     if (tipo === 'cliente') {
       r = await ocupar(botao, 'Salvando…', () => api('POST', '/api/clientes', {
         apelidoAtual: form.dataset.apelidoAtual, apelido: d.apelido, cnpj: d.cnpj, nome: d.nome, email: d.email,
-        mensal: { ativo: d.mensalAtivo, valor: d.valor || '', automatico: d.automatico },
+        mensal: { ativo: d.mensalAtivo, valor: d.valor || '', automatico: d.automatico, dia: d.dia || '' },
       }));
     } else if (tipo === 'meus-dados') r = await ocupar(botao, 'Salvando…', () => api('PUT', '/api/meus-dados', d));
     else if (tipo === 'servico') r = await ocupar(botao, 'Salvando…', () => api('PUT', '/api/servico', d));

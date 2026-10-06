@@ -134,7 +134,7 @@ test('Automação: desligada, ligada, apontando para outra instalação, emissã
   const comSenha = { SUPORTADO: true, temCredencial: () => true };
   assert.match(d.checarAutomacao(cfg, { ligada: false }, comSenha).detalhe, /2 clientes têm nota todo mês/);
   assert.strictEqual(d.checarAutomacao({ tomadores: {} }, { ligada: false }, comSenha).ok, 'aviso');
-  assert.match(d.checarAutomacao(cfg, { ligada: true }, comSenha).titulo, /ligada \(1 automática, 1 com 1 clique\)/);
+  assert.match(d.checarAutomacao(cfg, { ligada: true }, comSenha).titulo, /ligada \(1 automática, 1 com confirmação do valor\)/);
   assert.strictEqual(d.checarAutomacao(cfg, { ligada: true, detalhe: 'aponta para outra instalação' }, comSenha).ok, false);
   const semSenha = d.checarAutomacao(cfg, { ligada: true }, { SUPORTADO: true, temCredencial: () => false });
   assert.strictEqual(semSenha.ok, false);

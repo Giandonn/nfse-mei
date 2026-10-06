@@ -6,7 +6,7 @@
 // Tudo que fala com o mundo (notificações, emissão, e-mail, portal) chega por parâmetro, para dar para testar.
 const fs = require('fs');
 const path = require('path');
-const { ultimoDiaUtil, vencimentoDas, formatarBR, iso } = require('./datas');
+const { ultimoDiaUtil, diaDaNota, vencimentoDas, formatarBR, iso } = require('./datas');
 const { formatarValor, parseValor, soDigitos } = require('./valores');
 
 const MAX_FALHAS = 3; // depois disso a emissão automática vira pergunta
@@ -22,17 +22,31 @@ function salvarEstado(arquivo, estado) {
   fs.writeFileSync(arquivo, JSON.stringify(estado, null, 2), { mode: 0o600 });
 }
 
-// Qual competência a rotina deve cobrar hoje: a do mês, a partir do último dia útil; ou a do mês
-// anterior, até o dia 10 (computador desligado no dia certo). Fora disso, nenhuma.
-function competenciaPendente(hoje) {
+// A nota de um cliente num mês: o dia em que a rotina cobra (lembrete) e a competência.
+//  - sem dia escolhido: no último dia útil, a nota do próprio mês (competência nesse dia);
+//  - dia escolhido: nesse dia, a nota do mês anterior (competência no último dia útil dele).
+function notaDoMes(ano, mes /* 1-12 */, dia) {
+  const lembrete = diaDaNota(ano, mes, dia);
+  const data = dia ? ultimoDiaUtil(mes === 1 ? ano - 1 : ano, mes === 1 ? 12 : mes - 1) : lembrete;
+  return { data, mes: iso(data).slice(0, 7), lembrete };
+}
+
+// Qual nota de um cliente a rotina deve cobrar hoje: a do mês, a partir do dia dela. Computador desligado
+// no dia: recupera a que passou até o dia 10 do mês seguinte. Fora disso, nenhuma.
+function competenciaPendente(hoje, dia) {
   const a = hoje.getFullYear(), m = hoje.getMonth() + 1;
-  const ud = ultimoDiaUtil(a, m);
-  if (hoje >= ud) return { data: ud, mes: iso(ud).slice(0, 7) };
-  if (hoje.getDate() <= 10) {
-    const anterior = ultimoDiaUtil(m === 1 ? a - 1 : a, m === 1 ? 12 : m - 1);
-    return { data: anterior, mes: iso(anterior).slice(0, 7) };
-  }
+  const doMes = notaDoMes(a, m, dia);
+  if (hoje >= doMes.lembrete) return doMes;
+  const anterior = notaDoMes(m === 1 ? a - 1 : a, m === 1 ? 12 : m - 1, dia);
+  if (hoje.getDate() <= 10 && hoje - anterior.lembrete <= 15 * 86400000) return anterior;
   return null;
+}
+
+// A próxima nota de um cliente a partir de hoje (hoje incluso).
+function proximaNota(hoje, dia) {
+  const a = hoje.getFullYear(), m = hoje.getMonth() + 1;
+  const doMes = notaDoMes(a, m, dia);
+  return hoje <= doMes.lembrete ? doMes : notaDoMes(m === 12 ? a + 1 : a, m === 12 ? 1 : m + 1, dia);
 }
 
 const clientesMensais = cfg => Object.entries(cfg.tomadores || {}).filter(([, t]) => t.mensal?.ativo);
@@ -47,11 +61,14 @@ async function rotina(dep) {
   return feito;
 }
 
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const BOTOES_NOTA = ['Emitir', 'Lembrar amanhã', 'Pular este mês'];
+const MAX_JANELAS = 5; // "Voltar" na confirmação reabre a janela da nota, mas não para sempre
+
 async function cuidarDasNotas(dep, feito) {
   const { cfg, hoje, agora = new Date(), estado, notificar, log, historico, painel } = dep;
-  const comp = competenciaPendente(hoje);
-  if (!comp) return;
-  const pendentes = clientesMensais(cfg).filter(([apelido, t]) => {
+  const pendentes = clientesMensais(cfg).map(([apelido, t]) => ({ apelido, t, comp: competenciaPendente(hoje, t.mensal.dia) })).filter(({ t, comp }) => {
+    if (!comp) return false;
     const k = `${soDigitos(t.cnpj)}|${comp.mes}`;
     if (estado.pulado?.[k]) return false;
     if (estado.adiadoAte?.[k] && new Date(estado.adiadoAte[k]) > agora) return false;
@@ -59,53 +76,43 @@ async function cuidarDasNotas(dep, feito) {
   });
   if (!pendentes.length) return;
 
-  // Antes de emitir, confere a lista do portal: pega notas feitas à mão (nunca emite duas vezes).
-  let sincronizou = false;
-  const sincronizarUmaVez = async () => {
-    if (sincronizou) return;
-    sincronizou = true;
-    try { await dep.sincronizar(comp); } catch (e) { log(`não consegui ler a lista do portal: ${e.message}`); throw e; }
+  // Antes de emitir, confere a lista do portal desde o mês da competência: pega notas feitas à mão
+  // (nunca emite duas vezes). Se não deu para ler, nenhuma nota desta rodada sai.
+  let lidoDesde = null;
+  let erroLeitura = null;
+  const conferirPortal = async comp => {
+    if (erroLeitura) throw erroLeitura;
+    if (lidoDesde && lidoDesde <= comp.mes) return;
+    try { await dep.sincronizar(comp); lidoDesde = comp.mes; } catch (e) { log(`não consegui ler a lista do portal: ${e.message}`); erroLeitura = e; throw e; }
   };
 
-  for (const [apelido, t] of pendentes) {
+  for (const { apelido, t, comp } of pendentes) {
     const k = `${soDigitos(t.cnpj)}|${comp.mes}`;
     const nome = t.nome || apelido;
-    const centavos = t.mensal.valor ? parseValor(t.mensal.valor) : null;
+    let centavos = t.mensal.valor ? parseValor(t.mensal.valor) : null;
     const falhas = estado.falhas?.[k] || 0;
     const resumo = painel.resumoDoAno(cfg, Number(comp.mes.slice(0, 4)), hoje);
-    const passaDoLimite = centavos && resumo.total + centavos > resumo.limite;
-    const automatico = t.mensal.automatico && centavos && !passaDoLimite && falhas < MAX_FALHAS;
+    const passaDoLimite = c => resumo.total + c > resumo.limite;
+    const automatico = t.mensal.automatico && centavos && !passaDoLimite(centavos) && falhas < MAX_FALHAS;
 
-    let decisao = automatico ? 'emitir' : null;
     if (!automatico) {
       // Não pergunta de novo a cada rodada: no máximo a cada algumas horas.
       const ultima = estado.perguntadoEm?.[k];
       if (ultima && agora - new Date(ultima) < HORAS_ENTRE_PERGUNTAS * 3600000) continue;
       (estado.perguntadoEm ??= {})[k] = agora.toISOString();
-      let texto = centavos
-        ? `R$ ${formatarValor(centavos)} para ${nome}\nCompetência ${formatarBR(comp.data)}`
-        : `Nota do mês para ${nome}\nCompetência ${formatarBR(comp.data)}\n\nO valor muda todo mês, então abro o nfse-mei para você digitar.`;
-      if (passaDoLimite) texto += `\n\n⚠️ Com esta nota o faturamento do ano passa do limite do MEI (R$ ${formatarValor(resumo.limite)}). Confira antes de emitir.`;
-      if (falhas >= MAX_FALHAS) texto += `\n\nA emissão automática falhou ${falhas} vezes (portal instável?). Quer tentar agora?`;
-      const botoes = centavos ? ['Emitir agora', 'Lembrar amanhã', 'Pular este mês'] : ['Abrir para emitir', 'Lembrar amanhã', 'Pular este mês'];
-      const r = await notificar.perguntar('nfse-mei: dia de nota fiscal', texto, botoes);
-      log(`pergunta da nota de ${apelido} (${comp.mes}): ${r || 'sem resposta'}`);
-      if (r === 'Lembrar amanhã') {
+      const escolha = await perguntarNota(dep, { apelido, t, comp, centavos, falhas, resumo, passaDoLimite });
+      if (escolha === 'Lembrar amanhã') {
         const amanha = new Date(hoje); amanha.setDate(amanha.getDate() + 1); amanha.setHours(8);
         (estado.adiadoAte ??= {})[k] = amanha.toISOString();
-      } else if (r === 'Pular este mês') {
+      } else if (escolha === 'Pular este mês') {
         (estado.pulado ??= {})[k] = true;
-      } else if (r === 'Abrir para emitir') {
-        dep.abrirTerminal(['emitir', '--tomador', apelido, '--competencia', formatarBR(comp.data)]);
-        feito.push({ acao: 'abriu-terminal', apelido });
-      } else if (r === 'Emitir agora') {
-        decisao = 'emitir';
       }
+      if (typeof escolha !== 'number') continue;
+      centavos = escolha;
     }
-    if (decisao !== 'emitir') continue;
 
     try {
-      await sincronizarUmaVez();
+      await conferirPortal(comp);
     } catch {
       registrarFalha(estado, k);
       await notificar.avisar('nfse-mei: não consegui emitir', `Nota para ${nome}: o portal não respondeu. Nada foi emitido; tento de novo mais tarde.`);
@@ -148,6 +155,44 @@ async function cuidarDasNotas(dep, feito) {
     await notificar.avisar(`✅ Nota nº ${numero} emitida`, texto);
     feito.push({ acao: 'emitiu', apelido, chave: res.chave, numero });
   }
+}
+
+// Janela da nota com o valor editável. Devolve os centavos a emitir, o botão de adiar/pular ou null.
+// Valor muito diferente do de costume, ou que passa do limite do MEI, pede confirmação; "Voltar" reabre a janela.
+async function perguntarNota(dep, { apelido, t, comp, centavos, falhas, resumo, passaDoLimite }) {
+  const { notificar, log } = dep;
+  const nome = t.nome || apelido;
+  const R = c => `R$ ${formatarValor(c)}`;
+  const alertas = [];
+  if (centavos && passaDoLimite(centavos)) alertas.push(`⚠️ Com esta nota o faturamento do ano passa do limite do MEI (${R(resumo.limite)}). Confira antes de emitir.`);
+  if (falhas >= MAX_FALHAS) alertas.push(`A emissão automática falhou ${falhas} vezes (portal instável?). Quer tentar agora?`);
+  let valor = centavos ? formatarValor(centavos) : '';
+  for (let i = 0; i < MAX_JANELAS; i++) {
+    const r = await notificar.pedirNota({
+      titulo: `nfse-mei: nota de ${MESES[Number(comp.mes.slice(5)) - 1]}`, cliente: nome, competencia: formatarBR(comp.data), valor,
+      resumo: `No ano: ${R(resumo.total)} de ${R(resumo.limite)} (${resumo.pct.toFixed(0)}%)`, alerta: alertas.join('\n'), botoes: BOTOES_NOTA,
+    });
+    log(`janela da nota de ${apelido} (${comp.mes}): ${!r ? 'sem resposta' : r.botao === 'Emitir' ? `Emitir R$ ${r.valor}${r.guardar ? ' (guardar o valor)' : ''}` : r.botao}`);
+    if (r?.botao !== 'Emitir') return r?.botao || null;
+    let novo;
+    try { novo = parseValor(r.valor); } catch { valor = r.valor; continue; }
+    valor = formatarValor(novo);
+    const motivos = [];
+    if (centavos && (novo > centavos * 1.5 || novo * 1.5 < centavos)) motivos.push(`É bem diferente do valor de costume (${R(centavos)}).`);
+    if (passaDoLimite(novo) && novo !== centavos) motivos.push(`Com ela o faturamento do ano passa do limite do MEI (${R(resumo.limite)}).`);
+    if (motivos.length) {
+      const sim = `Emitir ${R(novo)}`;
+      const ok = await notificar.perguntar('nfse-mei: confira o valor', `Nota de ${R(novo)} para ${nome}?\n\n${motivos.join('\n')}`, [sim, 'Voltar']);
+      if (ok !== sim) continue;
+    }
+    if (r.guardar && novo !== centavos) {
+      t.mensal.valor = formatarValor(novo);
+      dep.guardarValorMensal(apelido, t.mensal.valor);
+      log(`valor mensal de ${apelido} passa a ser R$ ${t.mensal.valor}`);
+    }
+    return novo;
+  }
+  return null;
 }
 
 function registrarFalha(estado, k) {
@@ -194,4 +239,4 @@ async function cuidarDoLimite(dep, feito) {
   feito.push({ acao: 'avisou-limite', nivel });
 }
 
-module.exports = { rotina, competenciaPendente, carregarEstado, salvarEstado, clientesMensais, MAX_FALHAS };
+module.exports = { rotina, competenciaPendente, proximaNota, carregarEstado, salvarEstado, clientesMensais, MAX_FALHAS };

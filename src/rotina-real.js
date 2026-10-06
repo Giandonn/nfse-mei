@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const { ARQUIVO_CONFIG, AMBIENTES, carregarConfig } = require('./config');
+const { ARQUIVO_CONFIG, AMBIENTES, carregarConfig, salvarConfig } = require('./config');
 const { hoje: hojeReal, formatarBR } = require('./datas');
 
 const PASTA = path.dirname(ARQUIVO_CONFIG);
@@ -76,17 +76,13 @@ async function sincronizarDoPortal(cfg, de, ate, log) {
   }
 }
 
-function abrirTerminal(args) {
-  const node = process.execPath;
-  if (process.platform === 'win32') {
-    spawn('cmd', ['/c', 'start', '"nfse-mei"', 'cmd', '/k', `"${node}" "${SCRIPT}" ${args.map(a => `"${a}"`).join(' ')}`],
-      { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref();
-  } else if (process.platform === 'darwin') {
-    const q = s => `'${String(s).replace(/'/g, "'\\''")}'`;
-    const cmd = [node, SCRIPT, ...args].map(q).join(' ');
-    spawn('osascript', ['-e', `tell application "Terminal" to do script ${JSON.stringify(cmd)}`, '-e', 'tell application "Terminal" to activate'],
-      { detached: true, stdio: 'ignore' }).unref();
-  }
+// Guarda o novo valor mensal de um cliente mexendo só nesse campo do config.json (o cfg em memória
+// tem caminhos expandidos e padrões preenchidos, que não devem ir para o arquivo).
+function guardarValorMensal(apelido, valor) {
+  const cru = JSON.parse(fs.readFileSync(ARQUIVO_CONFIG, 'utf8'));
+  if (!cru.tomadores?.[apelido]?.mensal) return;
+  cru.tomadores[apelido].mensal.valor = valor;
+  salvarConfig(cru);
 }
 
 async function executarRotina({ teste = false, eco = false } = {}) {
@@ -115,7 +111,7 @@ async function executarRotina({ teste = false, eco = false } = {}) {
         const r = await enviarNota(cfg, lerCredencial('email').senha, dados);
         log(`e-mail enviado para ${r.para.join(', ')}: ${r.assunto}`);
       },
-      abrirTerminal,
+      guardarValorMensal,
       abrirUrl: url => require('./portal').abrirNoNavegadorPadrao(url),
     });
     salvarEstado(ARQ_ESTADO, estado);

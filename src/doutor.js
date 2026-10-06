@@ -101,7 +101,7 @@ function checarAutomacao(cfg, situacao, cred) {
   if (automaticos.length && cred.SUPORTADO && !cred.temCredencial()) {
     return { ok: false, titulo: 'Rotina automática', detalhe: 'emissão sozinha ligada, mas sem senha guardada', dica: 'Rode: nfse-mei senha' };
   }
-  const partes = [automaticos.length && `${automaticos.length} automática${automaticos.length > 1 ? 's' : ''}`, mensais.length - automaticos.length && `${mensais.length - automaticos.length} com 1 clique`].filter(Boolean);
+  const partes = [automaticos.length && `${automaticos.length} automática${automaticos.length > 1 ? 's' : ''}`, mensais.length - automaticos.length && `${mensais.length - automaticos.length} com confirmação do valor`].filter(Boolean);
   return { ok: true, titulo: `Rotina automática: ligada${partes.length ? ` (${partes.join(', ')})` : ''}${situacao.proxima ? ` · próxima ${situacao.proxima}` : ''}` };
 }
 

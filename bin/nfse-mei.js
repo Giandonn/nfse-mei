@@ -125,10 +125,14 @@ async function editarCliente(cfg, apelidoAtual) {
       if (!r) return null;
       try { parseValor(r); return null; } catch { return 'valor inválido (ex: 3500 ou 3.500,00)'; }
     });
+    const { diaDaNotaValido } = require('../src/cadastro');
+    const dia = diaDaNotaValido(await perguntarValido('    Dia da nota (1 a 31 = nota do mês anterior nesse dia; vazio = último dia útil, nota do próprio mês)',
+      t.mensal?.dia ? String(t.mensal.dia) : '', r => (diaDaNotaValido(r) === null ? 'escolha um dia de 1 a 31, ou deixe vazio' : null)));
     const automatico = valor
-      ? await simOuNao('    Emitir SOZINHO no último dia útil, sem perguntar? (você recebe um aviso depois)', t.mensal?.automatico ? 's' : 'n')
+      ? await simOuNao('    Emitir SOZINHO no dia da nota, sem perguntar? (você recebe um aviso depois)', t.mensal?.automatico ? 's' : 'n')
       : false;
     mensal = { ativo: true, valor: valor ? formatarValor(parseValor(valor)) : '', automatico };
+    if (dia) mensal.dia = dia;
   }
   if (apelidoAtual && apelidoAtual !== apelido) {
     delete cfg.tomadores[apelidoAtual];
@@ -183,7 +187,7 @@ async function menuClientes(cfg) {
     apelidos.forEach((a, i) => {
       const t = cfg.tomadores[a];
       const extras = [a === cfg.tomadorPadrao && 'padrão',
-        t.mensal?.ativo && `todo mês${t.mensal.valor ? ` R$ ${t.mensal.valor}` : ''}${t.mensal.automatico ? ', automática' : ''}`,
+        t.mensal?.ativo && `todo mês${t.mensal.dia ? ` (dia ${t.mensal.dia})` : ''}${t.mensal.valor ? ` R$ ${t.mensal.valor}` : ''}${t.mensal.automatico ? ', automática' : ''}`,
         t.email && `e-mail ${t.email}`].filter(Boolean);
       log(`  ${i + 1}) ${a.padEnd(12)} ${formatarCnpj(t.cnpj)}  ${t.nome || ''}${extras.length ? `  (${extras.join(' · ')})` : ''}`);
     });
@@ -474,7 +478,8 @@ async function agendar(sub) {
   if (mensais.length) {
     for (const [a, t] of mensais) {
       const v = t.mensal.valor ? `R$ ${formatarValor(parseValor(t.mensal.valor))}` : 'valor digitado na hora';
-      log(`  • nota de ${t.nome || a} (${v}) no último dia útil do mês: ${t.mensal.automatico && t.mensal.valor ? 'EMITE SOZINHA e avisa' : 'pergunta antes, com 1 clique'}`);
+      const quando = t.mensal.dia ? `todo dia ${t.mensal.dia} (nota do mês anterior)` : 'no último dia útil do mês';
+      log(`  • nota de ${t.nome || a} (${v}) ${quando}: ${t.mensal.automatico && t.mensal.valor ? 'EMITE SOZINHA e avisa' : 'abre uma janela com o valor para você conferir ou mudar'}`);
     }
   } else {
     log('  • (nenhum cliente com "nota todo mês": ative em nfse-mei config → 3) Clientes → e) editar)');

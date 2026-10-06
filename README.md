@@ -3,7 +3,7 @@
 [![testes](https://github.com/Giandonn/nfse-mei/actions/workflows/testes.yml/badge.svg)](https://github.com/Giandonn/nfse-mei/actions/workflows/testes.yml)
 [![npm](.github/npm.svg)](https://www.npmjs.com/package/nfse-mei)
 
-**A nota do seu MEI no piloto automático.** O `nfse-mei` preenche por você o [Emissor Nacional da NFS-e](https://www.nfse.gov.br/EmissorNacional) (o portal do governo), confere tudo e emite. Se você quiser, ele faz isso **sozinho** no último dia útil do mês, manda a nota por e-mail para o cliente, lembra do DAS e avisa antes de você estourar o limite do MEI.
+**A nota do seu MEI no piloto automático.** O `nfse-mei` preenche por você o [Emissor Nacional da NFS-e](https://www.nfse.gov.br/EmissorNacional) (o portal do governo), confere tudo e emite. Se você quiser, ele faz isso **sozinho** no dia que você escolher (ou só abre uma janela com o valor para você conferir), manda a nota por e-mail para o cliente, lembra do DAS e avisa antes de você estourar o limite do MEI.
 
 ```text
 ✅ Nota nº 12 emitida
@@ -242,7 +242,7 @@ Abre no seu navegador um painel com tudo num lugar só:
 | Tela | O que tem |
 |---|---|
 | **Início** | Faturamento do ano x limite do MEI (com gráfico por mês e projeção), próximas notas do piloto automático, próximo DAS, botões para emitir uma nota avulsa (ou só testar) e sincronizar com o portal |
-| **Clientes** | Adicionar, editar e remover. Em cada um: **nota todo mês**, valor fixo, **emitir sozinho** (ou 1 clique) e o **e-mail** que recebe a nota |
+| **Clientes** | Adicionar, editar e remover. Em cada um: **nota todo mês**, valor fixo, **dia da nota**, **emitir sozinho** (ou confirmar o valor numa janela) e o **e-mail** que recebe a nota |
 | **Meus dados** | Seu CNPJ, pasta das notas, serviço (município, código, NBS, descrição) e a senha do emissor |
 | **Automação e e-mail** | Ligar/desligar o piloto automático e o lembrete do DAS, configurar o e-mail, mandar um e-mail de teste e ver o que a rotina fez |
 | **Notas** | As últimas notas, inclusive as feitas no portal e as canceladas |
@@ -293,8 +293,9 @@ Para quem fatura todo mês para os mesmos clientes. Liga uma vez e o computador 
 
 1. Para cada cliente fixo: `nfse-mei config` → **3) Clientes** → **e) editar** e responda:
    - **Nota todo mês para este cliente?** `s`
-   - **Valor fixo por mês:** ex. `3500`. Deixe vazio se o valor muda; aí ele abre o nfse-mei para você digitar.
-   - **Emitir SOZINHO, sem perguntar?** `s` para 100% automático, `n` para confirmar com 1 clique.
+   - **Valor fixo por mês:** ex. `3500`. Deixe vazio se o valor muda; aí a janela abre com o campo vazio para você digitar.
+   - **Dia da nota:** vazio = **último dia útil**, com a nota do próprio mês. Um dia de `1` a `31` = nesse dia, a nota do **mês anterior** (competência no último dia útil dele), para quem cobra no começo do mês pelo mês que passou. Em mês mais curto, vale o último dia do mês.
+   - **Emitir SOZINHO, sem perguntar?** `s` para 100% automático, `n` para conferir o valor numa janela antes.
    - **E-mail do cliente:** para onde mandar a nota (opcional).
 2. Guarde a senha do emissor, se ainda não guardou: `nfse-mei senha`.
 3. Ligue a rotina:
@@ -309,10 +310,31 @@ Ela roda escondida todo dia (9h e a cada 2h até 21h, e quando você liga o comp
 
 | Quando | O que a rotina faz |
 |---|---|
-| **Último dia útil do mês** | Cliente "automático": entra no portal, **confere se a nota do mês já existe** (inclusive feita à mão), emite, manda por e-mail e mostra um aviso ✅. Cliente "1 clique": abre uma janela **[Emitir agora] [Lembrar amanhã] [Pular este mês]** |
+| **No dia da nota** | Cliente "automático": entra no portal, **confere se a nota já existe** (inclusive feita à mão), emite, manda por e-mail e mostra um aviso ✅. Os outros: abre a janela da nota (abaixo) |
 | **Computador desligado no dia** | Faz isso quando você ligar, até o dia 10 do mês seguinte, com a competência do mês certo |
 | **5 dias antes do DAS (dia 20)** | Janela **[Abrir o PGMEI] [Já paguei] [Lembrar amanhã]**, uma vez por dia, até você marcar "Já paguei" |
 | **Faturamento perto do limite** | Avisa ao passar de 80%, ao passar do limite e se, no ritmo atual, você vai estourar no ano |
+
+### A janela da nota
+
+```
+┌─ nfse-mei: nota de outubro ─────────────────────────┐
+│  HYPEX HOLDING LTDA                                 │
+│  Competência: 30/10/2026                            │
+│                                                     │
+│  Valor:  R$ [ 3.500,00      ]                       │
+│          ☐ Usar este valor nos próximos meses       │
+│                                                     │
+│  No ano: R$ 38.500,00 de R$ 81.000,00 (48%)         │
+│                                                     │
+│  [Emitir R$ 3.500,00] [Lembrar amanhã] [Pular este mês] │
+└─────────────────────────────────────────────────────┘
+```
+
+- **Mudar o valor é só digitar.** O botão acompanha ("Emitir R$ 3.800,00"), então você vê o que vai sair antes de clicar. Valor que não dá para ler desliga o botão.
+- **A mudança vale só para esta nota**, a não ser que você marque "Usar este valor nos próximos meses".
+- **Erro de digitação:** valor muito diferente do de costume (mais de 50% para cima ou para baixo), ou que passaria do limite do MEI, pede uma confirmação. "Voltar" reabre a janela com o que você digitou.
+- **Fechou sem responder?** Ela volta umas 4 horas depois. "Lembrar amanhã" volta no dia seguinte; "Pular este mês" não volta mais neste mês.
 
 ### Por que dá para confiar
 
@@ -458,7 +480,7 @@ Quando dá erro, o script salva um print da tela em `ultimo-erro.png`, na mesma 
 - **Só o caso mais comum do MEI:** tomador com CNPJ no Brasil, sem retenção, sem dedução, sem intermediário e sem IBS/CBS.
 - **Depende do layout do portal** (mapeado na versão 1.6.0.0). Se o governo mudar a tela, os seletores em `src/portal.js` precisam de ajuste. Abra uma issue.
 - **Download com captcha:** manual, veja acima. Por isso o e-mail ao cliente leva a chave e o link da consulta oficial, não o PDF.
-- **Piloto automático precisa do computador ligado** e com você logado em algum momento entre o último dia útil e o dia 10. No Linux, agende com o `cron` (o `nfse-mei agendar` mostra a linha).
+- **Piloto automático precisa do computador ligado** e com você logado em algum momento entre o dia da nota e o dia 10 do mês seguinte. No Linux, agende com o `cron` (o `nfse-mei agendar` mostra a linha).
 - **Guardar a senha** funciona no Windows e no macOS. No Linux o resto funciona, mas o login fica manual (rode com `--ver` e entre na janela).
 - **Futuro:** emitir pela [API oficial da NFS-e](https://www.gov.br/nfse) com certificado digital A1, sem navegador e sem captcha.
 
@@ -485,7 +507,7 @@ Estrutura:
 - `src/email.js`: e-mail da nota para o cliente
 - `src/servidor.js` + `src/web/`: o painel no navegador (servidor local e a página)
 - `src/cadastro.js`: regras e validações do cadastro usadas pelo painel
-- `src/datas.js`: último dia útil e feriados nacionais
+- `src/datas.js`: último dia útil, dia da nota e feriados nacionais
 - `src/valores.js`: dinheiro e CNPJ
 - `src/credencial.js`: senha no cofre do sistema (DPAPI no Windows, Keychain no macOS)
 - `src/downloads.js`: vigia a pasta Downloads e guarda os arquivos na pasta do mês

@@ -10,7 +10,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { ARQUIVO_CONFIG, salvarConfig } = require('./config');
 const { formatarValor, parseValor } = require('./valores');
-const { hoje: hojeReal, formatarBR, ultimoDiaUtil, parseBR } = require('./datas');
+const { hoje: hojeReal, formatarBR, parseBR } = require('./datas');
 const cadastro = require('./cadastro');
 
 const PASTA_WEB = path.join(__dirname, 'web');
@@ -45,13 +45,13 @@ function montarEstado(dep) {
   const historico = require('./historico');
   const resumo = painel.resumoDoAno(cfg, hoje.getFullYear(), hoje);
   const das = painel.proximoDas(hoje);
-  const proximaData = ultimoDiaUtil(hoje.getFullYear(), hoje.getMonth() + 1);
-  const mesAlvo = require('./datas').iso(proximaData).slice(0, 7);
+  const { competenciaPendente, proximaNota } = require('./rotina');
   const proximas = Object.entries(cfg.tomadores).filter(([, t]) => t.mensal?.ativo).map(([apelido, t]) => {
-    const feita = historico.jaEmitida(cfg, t.cnpj, mesAlvo);
+    const alvo = competenciaPendente(hoje, t.mensal.dia) || proximaNota(hoje, t.mensal.dia);
+    const feita = historico.jaEmitida(cfg, t.cnpj, alvo.mes);
     return {
       apelido, nome: t.nome || apelido, valor: t.mensal.valor, automatico: Boolean(t.mensal.automatico && t.mensal.valor),
-      data: formatarBR(proximaData), email: t.email || '', feita: feita ? feita.numero : null,
+      data: formatarBR(alvo.lembrete), competencia: formatarBR(alvo.data), email: t.email || '', feita: feita ? feita.numero : null,
     };
   });
   const notas = historico.todasAsNotas(cfg).slice(-24).reverse().map(n => ({
