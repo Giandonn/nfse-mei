@@ -32,7 +32,7 @@ async function subir(extra = {}) {
   const srv = criarServidor({
     cred: {
       SUPORTADO: true,
-      temCredencial: q => senhas[q],
+      temCredencial: (q = 'emissor') => senhas[q],
       salvarCredencial: (usuario, q) => { chamadas.senhas.push([usuario, q]); senhas[q] = true; },
       apagarCredencial: q => { senhas[q] = false; },
     },
@@ -51,7 +51,10 @@ test('segurança: só abre com o código, só responde ao próprio endereço, re
   try {
     assert.match(url, /^http:\/\/127\.0\.0\.1:\d+\/\?t=[0-9a-f]{48}$/);
     // Página sem código / com código errado.
-    assert.strictEqual((await pedir(porta, { caminho: '/' })).status, 403);
+    // Sem código a página abre (F5 usa o código guardado na aba), mas sem dado nenhum: a API exige o código.
+    const semCodigo = await pedir(porta, { caminho: '/' });
+    assert.strictEqual(semCodigo.status, 200);
+    assert.doesNotMatch(semCodigo.texto, /cfg|tomadores|cnpj/i);
     assert.strictEqual((await pedir(porta, { caminho: '/?t=errado' })).status, 403);
     const pagina = await pedir(porta, { caminho: `/?t=${srv.token}` });
     assert.strictEqual(pagina.status, 200);
@@ -199,4 +202,61 @@ test('só pedidos com o código contam como atividade (sondar a porta não mant�
     await api('POST', '/api/ping');
     assert.ok(srv.ultimaAtividade() > antes);
   } finally { await srv.parar(); }
+});
+
+test('passo a passo: senha antes do cadastro, importa do portal, cadastra vários clientes e conclui', async () => {
+  const arq = process.env.NFSE_MEI_CONFIG;
+  const antes = fs.existsSync(arq) ? fs.readFileSync(arq) : null;
+  if (antes) fs.unlinkSync(arq);
+  const importado = {
+    notas: [{ chave: '7'.repeat(50), numero: '7', mes: '2026-10', cnpj: '11444777000161', nome: 'ACME LTDA', centavos: 350000, cancelada: false, origem: 'portal' }],
+    servico: { municipio: 'São Paulo/SP', codigoTributacaoNacional: '01.01.01', nbs: '115022000', descricao: 'Software' },
+    clientes: [{ cnpj: '11444777000161', nome: 'ACME LTDA', apelido: 'acme', ultimoValor: '3.500,00', mensal: true }],
+    de: new Date(2026, 3, 1), ate: new Date(2026, 9, 30),
+  };
+  let recusar = false;
+  const { srv, api, chamadas } = await subir({
+    importar: async () => { if (recusar) throw new Error('O portal recusou o CNPJ/senha salvos.'); return importado; },
+    consultarCnpj: async c => ({ cnpj: c, nome: 'BETA LTDA', municipio: '', email: '' }),
+  });
+  try {
+    assert.strictEqual((await api('GET', '/api/estado')).json.cfg, null);
+    assert.strictEqual((await api('POST', '/api/assistente/importar')).status, 400, 'sem senha não entra no portal');
+    assert.deepStrictEqual(Object.keys((await api('POST', '/api/assistente/senha', { cnpj: '123' })).json.erros), ['cnpj']);
+    assert.ok((await api('POST', '/api/assistente/senha', { cnpj: '11.222.333/0001-81' })).json.ok);
+    assert.deepStrictEqual(chamadas.senhas.at(-1), ['11222333000181', 'emissor']);
+
+    recusar = true;
+    let r = await api('POST', '/api/assistente/importar');
+    assert.deepStrictEqual([r.json.ok, r.json.recusou], [false, true]);
+    recusar = false;
+    r = await api('POST', '/api/assistente/importar');
+    assert.deepStrictEqual([r.json.ok, r.json.notas, r.json.clientes[0].apelido], [true, 1, 'acme']);
+    assert.strictEqual((await api('POST', '/api/cnpj', { cnpj: '11222333000181' })).json.nome, 'BETA LTDA');
+
+    r = await api('POST', '/api/assistente/cadastro', {
+      prestador: { prestadorCnpj: '11222333000181', pastaNotas: path.join(PASTA, 'notas') },
+      servico: importado.servico,
+      clientes: [
+        { apelido: 'acme', cnpj: '11444777000161', nome: 'ACME LTDA', email: 'fin@acme.com', mensal: { ativo: true, valor: '3.500,00', automatico: false } },
+        { apelido: 'beta', cnpj: '11222333000181', nome: 'BETA LTDA' },
+      ],
+    });
+    assert.ok(r.json.ok);
+    let e = (await api('GET', '/api/estado')).json;
+    assert.deepStrictEqual(Object.keys(e.cfg.tomadores), ['acme', 'beta']);
+    assert.deepStrictEqual(e.cfg.assistente, { emAndamento: true });
+    assert.strictEqual(e.notas.length, 1, 'as notas lidas no portal já aparecem no painel');
+    assert.ok(e.pendencias.some(p => p.titulo === 'E-mail' && p.aba === 'automacao'), 'cliente com e-mail e envio não configurado vira pendência');
+    assert.ok(e.pendencias.some(p => p.titulo === 'Rotina automática'));
+
+    await api('PUT', '/api/assistente', { pularEmail: true });
+    assert.deepStrictEqual((await api('GET', '/api/estado')).json.cfg.assistente, { emAndamento: true, pulouEmail: true });
+    await api('PUT', '/api/assistente', { concluir: true });
+    assert.strictEqual((await api('GET', '/api/estado')).json.cfg.assistente, undefined);
+    assert.strictEqual((await api('POST', '/api/assistente/cadastro', {})).status, 409, 'não sobrescreve um cadastro existente');
+  } finally {
+    await srv.parar();
+    if (antes) fs.writeFileSync(arq, antes);
+  }
 });

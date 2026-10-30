@@ -321,6 +321,6 @@ function abrirNoNavegadorPadrao(url) {
 }
 
 module.exports = {
-  AMBIENTES, abrirNavegador, garantirLogin, preencherPessoas, preencherServico,
+  AMBIENTES, abrirNavegador, abrirPagina, garantirLogin, preencherPessoas, preencherServico,
   preencherValores, conferirRevisao, emitirEBaixar, linkNotasEmitidas, abrirNoNavegadorPadrao,
 };

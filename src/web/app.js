@@ -57,9 +57,9 @@ function desenhar() {
   const pil = $('#status-piloto');
   pil.textContent = estado.agenda.ligada ? 'Piloto automático ligado' : 'Piloto automático desligado';
   pil.className = `pilula${estado.agenda.ligada ? ' ligado' : ''}`;
-  if (!estado.cfg) {
+  if (emAssistente()) {
     $('#abas').innerHTML = '';
-    $('#conteudo').innerHTML = telaBoasVindas();
+    $('#conteudo').innerHTML = telaAssistente();
     return;
   }
   $('#abas').innerHTML = ABAS.map(([id, nome]) => `<button type="button" data-aba="${id}" ${id === aba ? 'aria-current="page"' : ''}>${nome}</button>`).join('');
@@ -77,6 +77,7 @@ function telaInicio() {
   return `
   <h1>Olá!</h1>
   <p class="sub">Seu MEI em ${r.ano}, num lugar só.</p>
+  ${estado.pendencias.length ? `<div class="faixa ${estado.pendencias.some(p => p.grave) ? 'perigo' : 'alerta'} pendencias"><b>Falta pouco para tudo andar sozinho:</b><ul>${estado.pendencias.map(p => `<li>${esc(p.titulo)}: ${esc(p.detalhe || '')} <button class="botao" data-aba="${esc(p.aba)}">Resolver</button></li>`).join('')}</ul></div>` : ''}
   <div class="grade">
     <section class="cartao">
       <h2>Faturamento ${r.ano}</h2>
@@ -293,33 +294,6 @@ function telaNotas() {
   </section>`;
 }
 
-function telaBoasVindas() {
-  return `
-  <h1>Bem-vindo ao nfse-mei</h1>
-  <p class="sub">Cadastre seus dados uma vez. Depois dá para mudar tudo aqui no painel.</p>
-  <form data-form="inicial">
-    <ol class="passos">
-      <li><section class="cartao"><h2>Você (prestador)</h2><div class="campos">
-        ${campo('prestadorCnpj', 'Seu CNPJ', '', { ajuda: '(o mesmo do login no Emissor Nacional)', placeholder: '00.000.000/0000-00' })}
-        ${campo('pastaNotas', 'Pasta das notas', '~/Documents/NFSe')}
-      </div></section></li>
-      <li><section class="cartao"><h2>Serviço</h2><p class="detalhe">Copie da sua última nota no portal (Notas emitidas → ⋮ → Visualizar).</p><div class="campos">
-        ${campo('municipio', 'Município da prestação', '', { placeholder: 'São Paulo/SP' })}
-        ${campo('codigoTributacaoNacional', 'Código de Tributação Nacional', '', { placeholder: '01.01.01' })}
-        ${campo('nbs', 'Item da NBS', '', { placeholder: '115022000' })}
-        ${campo('descricao', 'Descrição do serviço', '', { largo: true, placeholder: 'Análise e desenvolvimento de sistemas' })}
-      </div></section></li>
-      <li><section class="cartao"><h2>Seu primeiro cliente</h2><div class="campos">
-        ${campo('nome', 'Razão social', '', { largo: true })}
-        ${campo('cnpj', 'CNPJ', '', { placeholder: '00.000.000/0000-00' })}
-        ${campo('apelido', 'Apelido', '', { ajuda: '(curto, sem espaço)', placeholder: 'acme' })}
-      </div></section></li>
-    </ol>
-    <span class="erro-campo" data-erro="geral"></span>
-    <div class="acoes"><button class="botao primario">Salvar e continuar</button></div>
-  </form>`;
-}
-
 function formEmitir() {
   const ts = Object.entries(estado.cfg.tomadores);
   const padrao = estado.cfg.tomadorPadrao || ts[0]?.[0];
@@ -387,6 +361,7 @@ document.addEventListener('click', async ev => {
   }
   const acao = alvo.dataset.acao;
   try {
+    if (acao.startsWith('as-')) return await acaoAssistente(acao, alvo);
     if (acao === 'fechar-modal') return fecharModal();
     if (acao === 'cliente-novo') return abrirModal(formCliente(''));
     if (acao === 'cliente-editar') return abrirModal(formCliente(alvo.dataset.apelido));
@@ -490,6 +465,7 @@ document.addEventListener('submit', async ev => {
   try {
     let r;
     const tipo = form.dataset.form;
+    if (tipo.startsWith('as-')) return await enviarAssistente(tipo, form, botao);
     if (tipo === 'cliente') {
       r = await ocupar(botao, 'Salvando…', () => api('POST', '/api/clientes', {
         apelidoAtual: form.dataset.apelidoAtual, apelido: d.apelido, cnpj: d.cnpj, nome: d.nome, email: d.email,
@@ -498,17 +474,10 @@ document.addEventListener('submit', async ev => {
     } else if (tipo === 'meus-dados') r = await ocupar(botao, 'Salvando…', () => api('PUT', '/api/meus-dados', d));
     else if (tipo === 'servico') r = await ocupar(botao, 'Salvando…', () => api('PUT', '/api/servico', d));
     else if (tipo === 'email') r = await ocupar(botao, 'Salvando…', () => api('PUT', '/api/email', d));
-    else if (tipo === 'inicial') {
-      r = await ocupar(botao, 'Salvando…', () => api('POST', '/api/cadastro-inicial', {
-        prestador: { prestadorCnpj: d.prestadorCnpj, pastaNotas: d.pastaNotas },
-        servico: { municipio: d.municipio, codigoTributacaoNacional: d.codigoTributacaoNacional, nbs: d.nbs, descricao: d.descricao },
-        cliente: { nome: d.nome, cnpj: d.cnpj, apelido: d.apelido },
-      }));
-    } else return;
+    else return;
     if (r.erros) return mostrarErros(form, r.erros);
     avisar('Salvo.');
     fecharModal();
-    if (tipo === 'inicial') { aba = 'dados'; avisar('Cadastro feito! Agora guarde a senha do Emissor Nacional.'); }
     recarregar();
   } catch (e) {
     avisar(e.message, true);

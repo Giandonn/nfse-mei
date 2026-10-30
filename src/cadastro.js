@@ -115,4 +115,24 @@ function cadastroInicial(d) {
   return { ok: true, cfg };
 }
 
-module.exports = { diaDaNotaValido, validarPrestador, validarServico, validarCliente, aplicarPrestador, aplicarServico, aplicarCliente, removerCliente, aplicarEmail, cadastroInicial };
+// Passo a passo do primeiro uso: meus dados + serviço + um ou mais clientes (os erros dos clientes
+// vêm como "clientes.0.cnpj"). O config nasce marcado como "assistente em andamento" até o fim.
+function cadastroDoAssistente(d) {
+  const cfg = { tomadores: {} };
+  const clientes = Array.isArray(d.clientes) ? d.clientes : [];
+  const erros = { ...validarPrestador(d.prestador || {}), ...validarServico(d.servico || {}) };
+  if (!clientes.length) erros.geral = 'adicione pelo menos um cliente';
+  clientes.forEach((c, i) => {
+    for (const [k, msg] of Object.entries(validarCliente(cfg, '', c))) erros[`clientes.${i}.${k}`] = msg;
+    const apelido = texto(c.apelido).toLowerCase();
+    if (clientes.slice(0, i).some(o => texto(o.apelido).toLowerCase() === apelido)) erros[`clientes.${i}.apelido`] = `apelido "${apelido}" repetido`;
+  });
+  if (temErro(erros)) return { erros };
+  aplicarPrestador(cfg, d.prestador);
+  aplicarServico(cfg, d.servico);
+  for (const c of clientes) aplicarCliente(cfg, '', c);
+  cfg.assistente = { emAndamento: true };
+  return { ok: true, cfg };
+}
+
+module.exports = { cadastroDoAssistente, diaDaNotaValido, validarPrestador, validarServico, validarCliente, aplicarPrestador, aplicarServico, aplicarCliente, removerCliente, aplicarEmail, cadastroInicial };
