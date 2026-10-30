@@ -1,10 +1,13 @@
 name: instalador
 
 # Monta o instalador do Windows e a fórmula do Homebrew.
-# Tag "v*" (ex: v0.3.0): publica os dois numa Release do GitHub. Manual (Actions -> Run workflow): só monta, para baixar e testar.
+# Tag "v*" (ex: v0.3.0): publica os dois numa Release do GitHub.
+# Manual (Actions -> Run workflow) ou PR que mexe no instalador: só monta, para baixar e testar.
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths: ['instalador/**', '.github/workflows/instalador.yml', 'package.json', 'bin/**']
   workflow_dispatch:
 
 permissions:
