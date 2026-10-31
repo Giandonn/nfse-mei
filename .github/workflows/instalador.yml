@@ -1,0 +1,77 @@
+name: instalador
+
+# Monta o instalador do Windows e a fórmula do Homebrew.
+# Tag "v*" (ex: v0.3.0): publica os dois numa Release do GitHub.
+# Manual (Actions -> Run workflow) ou PR que mexe no instalador: só monta, para baixar e testar.
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths: ['instalador/**', '.github/workflows/instalador.yml', 'package.json', 'bin/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Montar o instalador
+        run: node instalador/montar-windows.js
+      - name: O app instalado abre o painel (com o Node que vai junto)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist\nfse-mei-setup-*.exe | Select-Object -First 1
+          Start-Process $exe.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+          $app = "$env:LOCALAPPDATA\Programs\nfse-mei"
+          & "$app\node\node.exe" "$app\app\bin\nfse-mei.js" ajuda | Select-String 'abre o PAINEL'
+          if (-not $?) { throw 'o nfse-mei instalado não respondeu' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador-windows
+          path: dist/nfse-mei-setup-*.exe
+
+  homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pacote e fórmula
+        run: |
+          npm pack
+          VERSAO=$(node -p "require('./package.json').version")
+          SHA=$(sha256sum "nfse-mei-$VERSAO.tgz" | cut -d' ' -f1)
+          sed -e "s/@VERSAO@/$VERSAO/g" -e "s/@SHA256@/$SHA/g" instalador/homebrew/nfse-mei.rb > nfse-mei.rb
+          cat nfse-mei.rb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homebrew
+          path: |
+            nfse-mei-*.tgz
+            nfse-mei.rb
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, homebrew]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "nfse-mei ${GITHUB_REF_NAME#v}" --generate-notes \
+            nfse-mei-setup-*.exe nfse-mei-*.tgz nfse-mei.rb

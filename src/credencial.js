@@ -19,7 +19,8 @@ const ondeFica = (qual = 'emissor') => (process.platform === 'darwin'
 const ONDE = ondeFica('emissor');
 
 // Windows. Sem -NonInteractive: o Get-Credential precisa abrir a janela do Windows.
-const ps = script => execFileSync('powershell', ['-NoProfile', '-Command', script], { encoding: 'utf8' });
+// windowsHide: aberto pelo atalho (sem terminal), não pisca uma janela preta junto com a da senha.
+const ps = script => execFileSync('powershell', ['-NoProfile', '-Command', script], { encoding: 'utf8', windowsHide: true });
 const aspas = s => `'${String(s).replace(/'/g, "''")}'`;
 
 // macOS: o `security` já vem no sistema.

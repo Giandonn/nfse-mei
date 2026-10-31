@@ -6,3 +6,4 @@ historico.csv
 ultimo-erro.png
 *.pdf
 *.xml
+dist/

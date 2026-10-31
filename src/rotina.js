@@ -151,6 +151,9 @@ async function cuidarDasNotas(dep, feito) {
       } catch (e) {
         texto += `\nNão consegui mandar o e-mail (${e.message}). Rode: nfse-mei email enviar ${numero}`;
       }
+    } else if (t.email) {
+      texto += `\nO e-mail para ${t.email} NÃO foi enviado: o envio não está configurado (nfse-mei abrir → Automação e e-mail).`;
+      log(`e-mail não enviado para ${t.email}: envio não configurado`);
     }
     await notificar.avisar(`✅ Nota nº ${numero} emitida`, texto);
     feito.push({ acao: 'emitiu', apelido, chave: res.chave, numero });

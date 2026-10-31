@@ -53,14 +53,25 @@ A cada nota você informa só **cliente, valor e data**, e o script sugere a dat
 
 ## Começo rápido
 
-Já tem Node.js 20+, Google Chrome e a [senha do Emissor Nacional](#1-crie-a-senha-do-emissor-nacional-uma-vez-só)? Então são 3 comandos:
+Você só precisa do [Google Chrome](https://www.google.com/chrome/) e da [senha do Emissor Nacional](#1-crie-a-senha-do-emissor-nacional-uma-vez-só). Instale do jeito que for mais fácil para você:
 
-```bash
-npm install -g nfse-mei     # 1. instala
-nfse-mei abrir              # 2. abre o painel: cadastre seus dados, clientes e ligue o piloto automático
-```
+| Seu computador | Como instalar |
+|---|---|
+| **Windows** (sem instalar mais nada) | Baixe o `nfse-mei-setup-….exe` na [página de versões](https://github.com/Giandonn/nfse-mei/releases/latest) e abra. O Windows vai mostrar **"O Windows protegeu o computador"** (o instalador não tem assinatura paga): clique em **Mais informações → Executar assim mesmo**. Não pede administrador. |
+| **Mac** | `brew install giandonn/tap/nfse-mei` (precisa do [Homebrew](https://brew.sh)) e depois `nfse-mei` no Terminal |
+| **Já tem Node.js 20+** | `npm install -g nfse-mei` e depois `nfse-mei` |
 
-Prefere o terminal? `nfse-mei emitir --teste` cadastra e testa sem emitir, `nfse-mei emitir` emite e `nfse-mei agendar` liga o piloto automático.
+Ao abrir, um **passo a passo** no navegador configura tudo:
+
+1. **Senha do Emissor Nacional:** você digita uma vez, numa janela do sistema, e ela fica no cofre do Windows/Keychain do Mac.
+2. **O nfse-mei lê as suas notas no portal** (só leitura) e já preenche o serviço (município, código, NBS, descrição, da sua última nota) e os clientes (com o último valor e se é todo mês). Você só confere.
+3. **Na hora da nota:** "me pergunte antes" (padrão: aparece uma janela com o valor e você clica em Emitir) ou "emita sozinho".
+4. **E-mail para o cliente** (opcional), com o caminho da senha de app do Gmail.
+5. **Piloto automático** ligado, e um **teste que preenche a nota inteira sem emitir**.
+
+Depois disso, a única coisa que aparece é a janela da nota no dia certo. O que ficou faltando aparece no topo do painel, com um botão "Resolver".
+
+Prefere o terminal? `nfse-mei init` cadastra, `nfse-mei emitir --teste` testa sem emitir, `nfse-mei emitir` emite e `nfse-mei agendar` liga o piloto automático.
 
 Falta alguma coisa? Veja os [requisitos](#requisitos) logo abaixo ou rode `nfse-mei doutor`, que diz o que falta.
 
@@ -471,7 +482,7 @@ Quando dá erro, o script salva um print da tela em `ultimo-erro.png`, na mesma 
 - A senha só é digitada na página de login do próprio `nfse.gov.br`. Se o portal redirecionar para outro endereço, o script para sem digitar.
 - O Chrome usa um **perfil próprio** (`perfil-chrome`, na pasta do config), separado do seu navegador. O gerenciador de senhas do Chrome fica **desligado** nesse perfil, e qualquer senha que ele tenha guardado é apagada a cada execução. Assim não existe uma segunda cópia da senha fora do cofre do sistema.
 - No macOS/Linux a pasta do config é criada só para o seu usuário (permissão `700`). Ela guarda a sessão do portal e o histórico de notas.
-- O script só conversa com `nfse.gov.br` e, se você configurar o e-mail, com o servidor do **seu** e-mail. Não há telemetria nem servidor intermediário.
+- O script só conversa com `nfse.gov.br` e, se você configurar o e-mail, com o servidor do **seu** e-mail. Não há telemetria nem servidor intermediário. A única exceção: no passo a passo, quando você digita o CNPJ de um cliente novo, o nome é buscado na [BrasilAPI](https://brasilapi.com.br) (ou na [CNPJ.ws](https://www.cnpj.ws), se a primeira falhar). Só o CNPJ do cliente sai do computador, e esses dados já são públicos.
 - A rotina automática roda como o seu usuário, sem administrador, e não abre nenhuma porta nem atalho que um site possa acionar.
 - `config.json`, PDFs e XMLs estão no `.gitignore`. **Não commite seus dados.**
 

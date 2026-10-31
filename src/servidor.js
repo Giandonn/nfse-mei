@@ -9,12 +9,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { ARQUIVO_CONFIG, salvarConfig } = require('./config');
-const { formatarValor, parseValor } = require('./valores');
+const { formatarValor, parseValor, cnpjValido, soDigitos } = require('./valores');
 const { hoje: hojeReal, formatarBR, parseBR } = require('./datas');
 const cadastro = require('./cadastro');
 
 const PASTA_WEB = path.join(__dirname, 'web');
-const ARQUIVOS = { '/app.js': 'text/javascript', '/estilo.css': 'text/css' };
+const ARQUIVOS = { '/app.js': 'text/javascript', '/assistente.js': 'text/javascript', '/estilo.css': 'text/css' };
 const CABECALHOS = {
   'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'",
   'X-Content-Type-Options': 'nosniff',
@@ -27,17 +27,27 @@ function carregarCfg() {
   try { return require('./config').carregarConfig(); } catch { return null; }
 }
 
+// O que ainda falta para tudo andar sozinho (as mesmas checagens do `nfse-mei doutor`), com a aba que resolve.
+function pendencias(cfg, cred, agenda) {
+  const doutor = require('./doutor');
+  const aba = { 'Senha do emissor': 'dados', 'Rotina automática': 'automacao', 'E-mail': 'automacao' };
+  return [doutor.checarSenha(cred), doutor.checarAutomacao(cfg, agenda, cred), doutor.checarEmail(cfg, cred)]
+    .filter(i => i && i.ok !== true && !/^Opcional/.test(i.dica || ''))
+    .map(i => ({ titulo: i.titulo, detalhe: i.detalhe, grave: i.ok === false, aba: aba[i.titulo] || 'inicio' }));
+}
+
 // Tudo que a página precisa para desenhar as telas (sem senhas).
 function montarEstado(dep) {
   const cfg = carregarCfg();
   const cred = dep.cred;
+  const agenda = dep.agenda.situacao();
   const base = {
     versao: require('../package.json').version,
     plataforma: process.platform,
     arquivoConfig: ARQUIVO_CONFIG,
     cofre: cred.SUPORTADO,
     senhas: { emissor: cred.SUPORTADO && cred.temCredencial('emissor'), email: cred.SUPORTADO && cred.temCredencial('email') },
-    agenda: dep.agenda.situacao(),
+    agenda,
   };
   if (!cfg) return { ...base, cfg: null };
   const hoje = hojeReal();
@@ -66,6 +76,7 @@ function montarEstado(dep) {
       projecao: formatarValor(resumo.projecao), mesEstouro: resumo.mesEstouro, porMes: resumo.porMes.map(c => c / 100), ano: resumo.ano, sincronizadoEm: resumo.sincronizadoEm },
     das: { vencimento: formatarBR(das.vencimento), dias: das.dias },
     proximas, notas, log,
+    pendencias: pendencias(cfg, cred, agenda),
   };
 }
 
@@ -83,12 +94,15 @@ function criarServidor(dep = {}) {
     cred: require('./credencial'),
     agenda: require('./agenda'),
     log: () => {},
+    importar: () => require('./importar').importarDoPortal({ base: require('./config').AMBIENTES.producao }),
+    consultarCnpj: cnpj => require('./cnpj').consultarCnpj(cnpj),
     ...dep,
   };
   const token = dep.token || crypto.randomBytes(24).toString('hex');
   let porta;
   let ultimaAtividade = Date.now();
   let ocupado = null; // operação longa em andamento (só uma por vez)
+  let importado = null; // o que o passo a passo leu do portal
 
   const responder = (res, status, dados) => {
     res.writeHead(status, { ...CABECALHOS, 'Content-Type': 'application/json; charset=utf-8' });
@@ -143,6 +157,55 @@ function criarServidor(dep = {}) {
       const msg = body.ligar ? dep.agenda.ligar() : dep.agenda.desligar();
       return { ok: true, mensagem: msg };
     },
+    // ---- passo a passo do primeiro uso (funciona antes de existir o config)
+    'POST /api/assistente/senha': async body => {
+      if (!dep.cred.SUPORTADO) throw Object.assign(new Error('Guardar senha não é suportado neste sistema.'), { status: 400 });
+      if (!cnpjValido(body.cnpj)) return { erros: { cnpj: 'CNPJ inválido (confira os 14 números)' } };
+      return longa('guardando a senha', async () => {
+        try { dep.cred.salvarCredencial(soDigitos(body.cnpj), 'emissor'); } catch { return { erros: { senha: 'A janela foi fechada sem guardar.' } }; }
+        return { ok: true };
+      });
+    },
+    // Entra no portal e descobre serviço e clientes. As notas lidas ficam aqui até o cadastro ser salvo.
+    'POST /api/assistente/importar': async () => longa('lendo suas notas no portal', async () => {
+      if (!dep.cred.temCredencial('emissor')) throw Object.assign(new Error('Guarde a senha do emissor antes.'), { status: 400 });
+      try {
+        importado = await dep.importar();
+      } catch (e) {
+        const recusou = /recusou|inválid/i.test(e.message);
+        const semChrome = /distribution|executable doesn't exist/i.test(e.message);
+        return {
+          ok: false, recusou, semChrome,
+          mensagem: recusou ? 'O portal recusou o CNPJ ou a senha. Confira e guarde de novo.'
+            : semChrome ? 'O nfse-mei usa o Google Chrome para entrar no portal, e ele não está instalado.'
+              : `Não consegui ler o portal: ${e.message.split('\n')[0]}`,
+        };
+      }
+      const { servico, clientes, notas, prestadorCnpj } = importado;
+      return { ok: true, servico, clientes, prestadorCnpj, notas: notas.length };
+    }),
+    'POST /api/cnpj': async body => {
+      try { return { ok: true, ...(await dep.consultarCnpj(body.cnpj)) }; } catch (e) { return { ok: false, mensagem: e.message }; }
+    },
+    'POST /api/assistente/cadastro': async body => {
+      if (carregarCfg()) throw Object.assign(new Error('Já existe um cadastro.'), { status: 409 });
+      const r = cadastro.cadastroDoAssistente(body);
+      if (r.erros) return r;
+      salvar(r.cfg);
+      // Já deixa o painel com as notas do portal (faturamento do ano, "já emitida este mês").
+      if (importado?.notas.length) {
+        try { require('./historico').salvarPortal(carregarCfg(), importado.notas, importado.de, importado.ate); } catch (e) { dep.log(`assistente: notas não salvas: ${e.message}`); }
+      }
+      return { ok: true };
+    },
+    'PUT /api/assistente': async body => {
+      const cfg = exigirCfg();
+      if (body.concluir) delete cfg.assistente;
+      else cfg.assistente = { ...cfg.assistente, emAndamento: true, ...(body.pularEmail !== undefined && { pulouEmail: Boolean(body.pularEmail) }) };
+      salvar(cfg);
+      return { ok: true };
+    },
+
     'PUT /api/email': async body => { const cfg = exigirCfg(); const r = cadastro.aplicarEmail(cfg, body); if (r.ok) salvar(cfg); return r; },
 
     // A senha é digitada numa janela do sistema (Windows) ou no terminal (macOS), nunca na página.
@@ -210,8 +273,11 @@ function criarServidor(dep = {}) {
       return res.end(fs.readFileSync(path.join(PASTA_WEB, url.pathname.slice(1))));
     }
     if (req.method === 'GET' && url.pathname === '/') {
-      if (!tokenOk(url.searchParams.get('t'))) return responder(res, 403, { erro: 'abra pelo comando nfse-mei abrir' });
-      ultimaAtividade = Date.now();
+      // Sem ?t= (F5 depois que o código saiu da barra de endereço) a página abre e usa o código guardado
+      // na aba; ela não tem dado nenhum, e a API continua exigindo o código. Código errado é recusado.
+      const t = url.searchParams.get('t');
+      if (t !== null && !tokenOk(t)) return responder(res, 403, { erro: 'abra pelo comando nfse-mei abrir' });
+      if (t !== null) ultimaAtividade = Date.now();
       res.writeHead(200, { ...CABECALHOS, 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(PASTA_WEB, 'index.html')));
     }

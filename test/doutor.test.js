@@ -101,6 +101,7 @@ test('doutor completo: resultado e mensagem final', async () => {
     abrirChrome: async () => '154.0',
     buscar: async () => ({ ok: true, status: 200 }),
     cred: { SUPORTADO: true, temCredencial: () => false },
+    agenda: () => ({ ligada: false }), // não depende da tarefa agendada de verdade desta máquina
   };
   try {
     assert.strictEqual(await doutor(opcoes), false, 'sem cadastro não está pronto');

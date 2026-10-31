@@ -10,8 +10,9 @@ const AJUDA = `
 nfse-mei - emite a NFS-e do MEI no Emissor Nacional (nfse.gov.br)
 
 Uso:
-  nfse-mei abrir                    abre o PAINEL no navegador (cadastro, clientes, automação, e-mail, notas)
-  nfse-mei init                     primeiro cadastro, passo a passo (seus dados, serviço e clientes)
+  nfse-mei                          abre o PAINEL no navegador (na primeira vez, o passo a passo que configura tudo)
+  nfse-mei abrir                    o mesmo
+  nfse-mei init                     primeiro cadastro pelo terminal (seus dados, serviço e clientes)
   nfse-mei config                   menu para mudar seus dados, o serviço, os clientes e a senha
   nfse-mei senha [CNPJ]             guarda a senha do emissor (login automático)
   nfse-mei senha apagar             apaga a senha guardada
@@ -609,7 +610,8 @@ async function main() {
     },
   });
   const cmd = positionals[0];
-  if (op.help || !cmd) return log(AJUDA);
+  if (op.help || cmd === 'ajuda') return log(AJUDA);
+  if (!cmd) return abrirPainel(op);
   if (cmd === 'init') return init();
   if (cmd === 'config') return require('fs').existsSync(ARQUIVO_CONFIG) ? menuConfig(carregarConfig()) : init();
   if (cmd === 'emitir') return emitir(op);

@@ -189,3 +189,31 @@ pre.log { background: var(--fundo); border: 1px solid var(--borda); border-radiu
   .conteudo { padding: 16px; }
   .abas { order: 3; width: 100%; overflow-x: auto; flex-wrap: nowrap; }
 }
+
+/* ---- passo a passo do primeiro uso */
+.progresso { display: flex; flex-wrap: wrap; gap: 6px 18px; list-style: none; padding: 0; margin: 0 0 20px; counter-reset: passo; font-size: 13px; color: var(--suave); }
+.progresso li { counter-increment: passo; display: flex; align-items: center; gap: 6px; }
+.progresso li::before { content: counter(passo); display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--borda); font-weight: 600; font-size: 12px; }
+.progresso li.feito::before { content: "✓"; background: var(--marca-clara); border-color: var(--marca); color: var(--marca); }
+.progresso li.atual { color: var(--texto); font-weight: 600; }
+.progresso li.atual::before { background: var(--marca); border-color: var(--marca); color: #fff; }
+.lista-passos { margin: 8px 0 12px; padding-left: 20px; line-height: 1.6; }
+.lista-passos li + li { margin-top: 4px; }
+.lista-check { list-style: none; padding: 0; margin: 0; }
+.lista-check li { padding: 8px 0 8px 28px; position: relative; border-top: 1px solid var(--borda); line-height: 1.5; }
+.lista-check li:first-child { border-top: 0; }
+.lista-check li::before { content: "•"; position: absolute; left: 8px; color: var(--marca); font-weight: 700; }
+.lista-check li.ok::before { content: "✓"; left: 4px; color: var(--ok); }
+.lista-check li.aviso::before { content: "!"; left: 8px; color: var(--alerta); }
+.lista-check li.erro::before { content: "✗"; left: 4px; color: var(--perigo); }
+.lista-check .botao { margin-left: 6px; padding: 2px 10px; font-size: 13px; }
+fieldset.escolha { border: 0; padding: 0; margin: 8px 0 0; }
+fieldset.escolha legend { font-size: 13px; color: var(--suave); margin-bottom: 6px; }
+fieldset.escolha label { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; margin-top: 6px; cursor: pointer; line-height: 1.45; }
+fieldset.escolha label:has(input:checked) { border-color: var(--marca); background: var(--marca-clara); }
+fieldset.escolha:disabled { opacity: .5; }
+fieldset.escolha input { margin-top: 3px; }
+.faixa.pendencias ul { margin: 6px 0 0; padding-left: 18px; }
+.faixa.pendencias li + li { margin-top: 4px; }
+.faixa.pendencias .botao { margin-left: 6px; padding: 2px 10px; font-size: 13px; }
+.cartao h2 .chip { display: inline-block; width: auto; vertical-align: middle; margin-left: 8px; font-weight: 500; }

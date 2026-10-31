@@ -224,6 +224,14 @@ test('e-mail falhou: a nota continua emitida e o aviso explica como reenviar', a
   assert.match(ev.avisos.find(a => a.titulo.includes('emitida')).texto, /Não consegui mandar o e-mail \(senha de app recusada\).*nfse-mei email enviar/s);
 });
 
+test('cliente com e-mail mas envio não configurado: o aviso diz que o e-mail não foi', async () => {
+  const { dep, ev } = cenario({ tomadores: { acme: ACME }, hoje: new Date(2026, 9, 30), cfgExtra: { email: undefined } });
+  await rotina(dep);
+  assert.strictEqual(ev.emitidas.length, 1);
+  assert.strictEqual(ev.emails.length, 0);
+  assert.match(ev.avisos.find(a => a.titulo.includes('emitida')).texto, /fin@acme\.com NÃO foi enviado: o envio não está configurado/);
+});
+
 test('DAS: lembra nos 5 dias antes do vencimento, uma vez por dia, até "Já paguei"', async () => {
   const { dep, ev } = cenario({ tomadores: {}, hoje: new Date(2026, 9, 14), respostas: ['Lembrar amanhã', 'Abrir o PGMEI', 'Já paguei'] });
   await rotina(dep); // 14/10: faltam 6 dias, ainda não
