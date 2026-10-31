@@ -1,6 +1,6 @@
 {
   "name": "nfse-mei",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Emite a NFS-e do MEI no Emissor Nacional (nfse.gov.br) pelo terminal: preenche, confere e só emite com seu OK.",
   "keywords": [
     "nfse",
